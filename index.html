@@ -1,360 +1,832 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
-<meta charset="UTF-8">
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>WhatsApp Contact</title>
-
-<style>
-
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
-
-body{
-    min-height:100vh;
-
-    display:flex;
-    align-items:center;
-    justify-content:center;
-
-    padding:20px;
-
-    font-family:
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        Arial,
-        sans-serif;
-
-    background:
-        linear-gradient(
-            135deg,
-            #eef2ff,
-            #f8fafc,
-            #ecfdf5
-        );
-}
-
-.container{
-    width:100%;
-    max-width:420px;
-}
-
-.card{
-    background:#ffffff;
-
-    border:1px solid #e5e7eb;
-
-    border-radius:26px;
-
-    padding:30px 24px;
-
-    text-align:center;
-
-    box-shadow:
-        0 20px 55px
-        rgba(15,23,42,.12);
-}
-
-
-/* ICON */
-
-.icon{
-    width:76px;
-    height:76px;
-
-    margin:0 auto 18px;
-
-    display:flex;
-    align-items:center;
-    justify-content:center;
-
-    border-radius:23px;
-
-    background:#dcfce7;
-
-    font-size:38px;
-}
-
-
-/* TITLE */
-
-.title{
-    font-size:25px;
-
-    font-weight:850;
-
-    color:#111827;
-}
-
-
-.subtitle{
-    margin-top:7px;
-
-    font-size:12px;
-
-    line-height:1.6;
-
-    color:#6b7280;
-}
-
-
-/* NUMBER */
-
-.number-box{
-
-    margin-top:22px;
-
-    padding:14px;
-
-    border-radius:15px;
-
-    background:#f8fafc;
-
-    border:1px solid #e5e7eb;
-
-}
-
-
-.number-label{
-
-    font-size:8px;
-
-    color:#9ca3af;
-
-    font-weight:800;
-
-    text-transform:uppercase;
-
-    letter-spacing:.7px;
-
-}
-
-
-.number{
-
-    margin-top:4px;
-
-    font-size:16px;
-
-    color:#374151;
-
-    font-weight:750;
-
-}
-
-
-/* BUTTON */
-
-.whatsapp-btn{
-
-    width:100%;
-
-    margin-top:18px;
-
-    padding:15px 18px;
-
-    border:0;
-
-    border-radius:15px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    gap:10px;
-
-    background:#25D366;
-
-    color:#ffffff;
-
-    font-size:14px;
-
-    font-weight:800;
-
-    cursor:pointer;
-
-    box-shadow:
-        0 8px 20px
-        rgba(37,211,102,.25);
-
-    transition:
-        transform .15s ease,
-        box-shadow .15s ease;
-}
-
-
-.whatsapp-btn:hover{
-
-    box-shadow:
-        0 11px 26px
-        rgba(37,211,102,.35);
-
-}
-
-
-.whatsapp-btn:active{
-
-    transform:scale(.97);
-
-}
-
-
-.whatsapp-icon{
-
-    font-size:20px;
-
-}
-
-
-/* FOOTER */
-
-.footer{
-
-    margin-top:20px;
-
-    font-size:9px;
-
-    color:#9ca3af;
-
-}
-
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A2 Morning Quiz App - start your daily quiz, earn coins, and unlock rewards.">
+    <title>A2 Morning Quiz App</title>
+
+    <style>
+        :root {
+            --indigo: #4f46e5;
+            --violet: #7c3aed;
+            --ink: #172033;
+            --muted: #667085;
+            --line: #e7eaf2;
+            --surface: #ffffff;
+            --page: #f4f7fb;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: var(--ink);
+            background: var(--page);
+            line-height: 1.5;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .hero {
+            position: relative;
+            min-height: 590px;
+            overflow: hidden;
+            color: #fff;
+            background: linear-gradient(135deg, #4338ca 0%, var(--indigo) 45%, var(--violet) 100%);
+        }
+
+        .hero::before,
+        .hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .08);
+            pointer-events: none;
+        }
+
+        .hero::before {
+            width: 440px;
+            height: 440px;
+            top: -250px;
+            right: -110px;
+        }
+
+        .hero::after {
+            width: 300px;
+            height: 300px;
+            bottom: -210px;
+            left: -95px;
+        }
+
+        .nav,
+        .hero-content,
+        .hero-art {
+            position: relative;
+            z-index: 1;
+        }
+
+        .nav {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 24px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -.3px;
+        }
+
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border-radius: 14px;
+            color: var(--indigo);
+            background: #fff;
+            font-size: 22px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, .18);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .nav-links a {
+            opacity: .86;
+            transition: opacity .2s ease;
+        }
+
+        .nav-links a:hover {
+            opacity: 1;
+        }
+
+        .nav-link-button {
+            padding: 10px 17px;
+            border: 1px solid rgba(255, 255, 255, .35);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, .13);
+        }
+
+        .hero-content {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 64px 24px 120px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 13px;
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 30px;
+            color: #e0e7ff;
+            background: rgba(255, 255, 255, .11);
+            font-size: 12px;
+            font-weight: 750;
+            letter-spacing: .7px;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            max-width: 640px;
+            margin-top: 22px;
+            font-size: clamp(40px, 6vw, 70px);
+            line-height: 1.02;
+            letter-spacing: -2.8px;
+        }
+
+        .hero-copy {
+            max-width: 540px;
+            margin-top: 21px;
+            color: #e0e7ff;
+            font-size: 17px;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 30px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            min-height: 49px;
+            padding: 0 21px;
+            border: 0;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .button-primary {
+            color: var(--indigo);
+            background: #fff;
+            box-shadow: 0 12px 25px rgba(30, 27, 75, .2);
+        }
+
+        .button-secondary {
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, .3);
+            background: rgba(255, 255, 255, .1);
+        }
+
+        .hero-art {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            right: max(6%, calc((100% - 1120px) / 2));
+            top: 190px;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(255, 255, 255, .22);
+            border-radius: 45px;
+            background: rgba(255, 255, 255, .1);
+            box-shadow: 0 25px 55px rgba(30, 27, 75, .18);
+            transform: rotate(6deg);
+        }
+
+        .hero-art-inner {
+            width: 210px;
+            height: 220px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            border-radius: 30px;
+            color: var(--ink);
+            background: #fff;
+            transform: rotate(-6deg);
+            box-shadow: 0 18px 35px rgba(30, 27, 75, .2);
+        }
+
+        .hero-art-inner span:first-child {
+            font-size: 68px;
+        }
+
+        .hero-art-inner strong {
+            font-size: 18px;
+        }
+
+        .hero-art-inner small {
+            color: var(--muted);
+            font-weight: 650;
+        }
+
+        .main {
+            max-width: 1120px;
+            margin: -68px auto 0;
+            padding: 0 24px 55px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .section-heading {
+            margin: 92px 0 24px;
+            text-align: center;
+        }
+
+        .section-heading h2 {
+            font-size: 30px;
+            letter-spacing: -.8px;
+        }
+
+        .section-heading p {
+            margin-top: 7px;
+            color: var(--muted);
+        }
+
+        .feature-grid,
+        .quick-grid {
+            display: grid;
+            gap: 17px;
+        }
+
+        .feature-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .feature-card,
+        .quick-card,
+        .business-card {
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--surface);
+            box-shadow: 0 15px 38px rgba(31, 41, 55, .07);
+        }
+
+        .feature-card {
+            padding: 25px 22px;
+        }
+
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            display: grid;
+            place-items: center;
+            border-radius: 16px;
+            background: #eef2ff;
+            font-size: 26px;
+        }
+
+        .feature-card h3 {
+            margin-top: 17px;
+            font-size: 17px;
+        }
+
+        .feature-card p {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .quick-grid {
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        .quick-card {
+            display: flex;
+            min-height: 145px;
+            padding: 20px;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+
+        .quick-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(31, 41, 55, .12);
+        }
+
+        .quick-card-icon {
+            font-size: 28px;
+        }
+
+        .quick-card strong {
+            font-size: 15px;
+        }
+
+        .quick-card small {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .today-section {
+            margin-top: 92px;
+        }
+
+        .today-panel {
+            padding: 24px;
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            background: linear-gradient(135deg, #fff, #f8faff);
+            box-shadow: 0 15px 38px rgba(31, 41, 55, .07);
+        }
+
+        .today-status {
+            margin-bottom: 18px;
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .today-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .today-question {
+            padding: 18px;
+            border: 1px solid #e4e8f3;
+            border-radius: 17px;
+            background: #fff;
+        }
+
+        .today-question-title {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            color: #202534;
+            font-size: 15px;
+            font-weight: 750;
+        }
+
+        .today-number {
+            flex: 0 0 30px;
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--indigo), var(--violet));
+            font-size: 13px;
+        }
+
+        .today-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin: 14px 0 0 42px;
+        }
+
+        .today-option {
+            padding: 10px 12px;
+            border: 1px solid #e7eaf2;
+            border-radius: 10px;
+            color: #596579;
+            background: #f8fafc;
+            font-size: 13px;
+        }
+
+        .today-option.correct {
+            border-color: #86efac;
+            color: #166534;
+            background: #f0fdf4;
+            font-weight: 700;
+        }
+
+        .today-answer {
+            margin: 12px 0 0 42px;
+            padding: 11px 13px;
+            border-left: 3px solid #10b981;
+            border-radius: 0 10px 10px 0;
+            color: #166534;
+            background: #ecfdf5;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .today-empty {
+            padding: 24px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .business-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 30px;
+            margin-top: 92px;
+            padding: 30px;
+            background: linear-gradient(135deg, #f8faff, #fff);
+        }
+
+        .business-card h2 {
+            font-size: 21px;
+        }
+
+        .business-card p {
+            margin-top: 9px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .address {
+            max-width: 420px;
+            padding: 15px 18px;
+            border-left: 3px solid var(--indigo);
+            border-radius: 0 12px 12px 0;
+            color: #475467;
+            background: #f5f7ff;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .footer {
+            padding: 26px 24px 34px;
+            border-top: 1px solid var(--line);
+            color: #98a2b3;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        @media (max-width: 800px) {
+            .hero {
+                min-height: 680px;
+            }
+
+            .nav-links a:not(.nav-link-button) {
+                display: none;
+            }
+
+            .hero-content {
+                padding-top: 50px;
+            }
+
+            .hero-art {
+                top: 420px;
+                right: 50%;
+                width: 210px;
+                height: 180px;
+                transform: translateX(50%) rotate(4deg);
+            }
+
+            .hero-art-inner {
+                width: 145px;
+                height: 140px;
+                gap: 4px;
+                transform: rotate(-4deg);
+            }
+
+            .hero-art-inner span:first-child {
+                font-size: 43px;
+            }
+
+            .hero-art-inner strong {
+                font-size: 14px;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .today-options {
+                grid-template-columns: 1fr;
+                margin-left: 0;
+            }
+
+            .today-answer {
+                margin-left: 0;
+            }
+
+            .business-card {
+                align-items: stretch;
+                flex-direction: column;
+                gap: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav {
+                padding: 18px 17px;
+            }
+
+            .brand {
+                font-size: 16px;
+            }
+
+            .nav-link-button {
+                padding: 9px 12px;
+                font-size: 12px;
+            }
+
+            .hero-content,
+            .main {
+                padding-left: 17px;
+                padding-right: 17px;
+            }
+
+            h1 {
+                font-size: 43px;
+                letter-spacing: -1.8px;
+            }
+
+            .hero-copy {
+                font-size: 15px;
+            }
+
+            .hero-actions .button {
+                width: 100%;
+            }
+
+            .section-heading {
+                margin-top: 72px;
+            }
+
+            .business-card {
+                padding: 23px;
+            }
+
+            .today-panel {
+                padding: 15px;
+            }
+
+            .today-question {
+                padding: 15px;
+            }
+        }
+    </style>
 </head>
 
-
 <body>
+    <header class="hero">
+        <nav class="nav" aria-label="Main navigation">
+            <a class="brand" href="index.html">
+                <span class="brand-mark" aria-hidden="true">✦</span>
+                <span>A2 Morning</span>
+            </a>
+            <div class="nav-links">
+                <a href="#how-it-works">How it works</a>
+                <a href="index.html#today-title">Quiz Q&amp;A</a>
+                <a class="nav-link-button" href="policy.html">Privacy Policy →</a>
+            </div>
+        </nav>
 
-
-<div class="container">
-
-
-    <div class="card">
-
-
-        <div class="icon">
-            💬
+        <div class="hero-content">
+            <span class="eyebrow">☀️ Learn. Play. Grow.</span>
+            <h1>Make every morning a smart start.</h1>
+            <p class="hero-copy">
+                Welcome to A2 Morning Quiz App — test your knowledge, build a daily habit,
+                collect coins, and unlock exciting rewards as you play.
+            </p>
+            <div class="hero-actions">
+                <a class="button button-primary" href="index.html#today-title">🧠 View quiz questions &amp; answers</a>
+                <a class="button button-secondary" href="#how-it-works">Explore the app ↓</a>
+            </div>
         </div>
 
-
-        <div class="title">
-            Contact Us
+        <div class="hero-art" aria-hidden="true">
+            <div class="hero-art-inner">
+                <span>🧠</span>
+                <strong>Daily challenge</strong>
+                <small>Keep your streak alive</small>
+            </div>
         </div>
+    </header>
 
-
-        <div class="subtitle">
-            Have any questions or need help?
-            Contact us directly.
-        </div>
-
-
-        <div class="number-box">
-
-
-            <div class="number-label">
-                WhatsApp Number
+    <main class="main">
+        <section id="how-it-works" aria-labelledby="features-title">
+            <div class="section-heading">
+                <h2 id="features-title">Everything you need to stay sharp</h2>
+                <p>A simple, rewarding way to make learning part of your routine.</p>
             </div>
 
+            <div class="feature-grid">
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">🎯</div>
+                    <h3>Play daily quizzes</h3>
+                    <p>Challenge yourself with questions designed to keep your mind active every morning.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">🪙</div>
+                    <h3>Earn coins</h3>
+                    <p>Answer correctly and watch your coin balance grow with every quiz match.</p>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">🎁</div>
+                    <h3>Unlock rewards</h3>
+                    <p>Reach milestones and unlock exclusive coupons from the Rewards Center.</p>
+                </article>
+            </div>
+        </section>
 
-            <div class="number">
-                +91 97841 04853
+        <section aria-labelledby="quick-links-title">
+            <div class="section-heading">
+                <h2 id="quick-links-title">Your app, all in one place</h2>
+                <p>Jump straight to the area you want to visit.</p>
             </div>
 
+            <div class="quick-grid">
+                <a class="quick-card" href="index.html#today-title">
+                    <span class="quick-card-icon" aria-hidden="true">🏆</span>
+                    <span><strong>Quiz Questions &amp; Answers</strong><small>Review questions and results</small></span>
+                </a>
+                <a class="quick-card" href="coupon.html">
+                    <span class="quick-card-icon" aria-hidden="true">🎟️</span>
+                    <span><strong>Rewards Center</strong><small>See your coupons</small></span>
+                </a>
+                <a class="quick-card" href="profle.html">
+                    <span class="quick-card-icon" aria-hidden="true">👤</span>
+                    <span><strong>My Profile</strong><small>View your statistics</small></span>
+                </a>
+                <a class="quick-card" href="index2.html">
+                    <span class="quick-card-icon" aria-hidden="true">💬</span>
+                    <span><strong>Contact Us</strong><small>Get help on WhatsApp</small></span>
+                </a>
+                <a class="quick-card" href="policy.html">
+                    <span class="quick-card-icon" aria-hidden="true">🛡️</span>
+                    <span><strong>Privacy Policy</strong><small>Read our privacy details</small></span>
+                </a>
+            </div>
+        </section>
 
-        </div>
+        <section class="today-section" aria-labelledby="today-title">
+            <div class="section-heading">
+                <h2 id="today-title">Today’s Quiz Questions &amp; Answers</h2>
+                <p>Review only the questions currently published for today.</p>
+            </div>
+            <div class="today-panel">
+                <div class="today-status" id="todayStatus" role="status">Loading today’s quiz...</div>
+                <div class="today-list" id="todayQuizList"></div>
+            </div>
+        </section>
 
+        <section class="business-card" aria-labelledby="business-title">
+            <div>
+                <h2 id="business-title">A2 Morning Quiz App</h2>
+                <p>Operated by <strong>LUV KUSH HARDWARE</strong></p>
+            </div>
+            <address class="address">
+                <strong>Business address</strong><br>
+                0, Brahimpurchakrapan, Mashrakh, Po Brahimpurgopi<br>
+                Saran, Bihar 841417
+            </address>
+        </section>
+    </main>
 
-        <button
-            type="button"
-            class="whatsapp-btn"
-            id="whatsappButton">
+    <footer class="footer">
+        © 2026 A2 Morning Quiz App · LUV KUSH HARDWARE
+    </footer>
 
-            <span class="whatsapp-icon">
-                💬
-            </span>
+    <script>
+        const todayQuizPath =
+            "https://a2moring-default-rtdb.firebaseio.com/Special%20Quizz/Quiz1.json";
 
-            <span>
-                WhatsApp
-            </span>
-
-        </button>
-
-
-        <div class="footer">
-            © 2026 Bombay Web App
-        </div>
-
-
-    </div>
-
-
-</div>
-
-
-<script>
-
-/* ============================================
-   WHATSAPP NUMBER
-============================================ */
-
-const whatsappNumber =
-    "919784104853";
-
-
-/* ============================================
-   WHATSAPP LINK
-============================================ */
-
-const whatsappLink =
-    "https://wa.me/" +
-    whatsappNumber;
-
-
-/* ============================================
-   BUTTON CLICK
-============================================ */
-
-document
-    .getElementById("whatsappButton")
-    .addEventListener(
-        "click",
-        function(event){
-
-            /*
-             * Prevent any default action.
-             */
-
-            event.preventDefault();
-
-
-            /*
-             * ONLY OUTPUT
-             * 
-             * The console will contain
-             * ONLY the WhatsApp URL.
-             */
-
-            console.log(
-                whatsappLink
-            );
-
+        function cleanQuizText(value) {
+            let text = value === null || value === undefined ? "" : String(value).trim();
+            while (
+                text.length >= 2 &&
+                ((text.startsWith('"') && text.endsWith('"')) ||
+                    (text.startsWith("'") && text.endsWith("'")))
+            ) {
+                text = text.substring(1, text.length - 1).trim();
+            }
+            return text;
         }
-    );
 
-</script>
+        function parseTodayQuestion(rawQuestion) {
+            let values = [];
+            if (Array.isArray(rawQuestion)) {
+                values = rawQuestion;
+            } else if (typeof rawQuestion === "string") {
+                try {
+                    values = JSON.parse(rawQuestion);
+                } catch (error) {
+                    try {
+                        values = JSON.parse(rawQuestion.replace(/^"+|"+$/g, ""));
+                    } catch (nestedError) {
+                        return { question: "Question unavailable", options: [], answer: "Answer unavailable" };
+                    }
+                }
+            }
 
+            const options = [];
+            let answer = "Answer unavailable";
+            values.slice(1).forEach(function (value) {
+                const option = cleanQuizText(value);
+                const correct = /===true/i.test(option);
+                const text = option.replace(/===true/gi, "").trim();
+                options.push({ text: text, correct: correct });
+                if (correct) {
+                    answer = text;
+                }
+            });
 
+            return {
+                question: values.length ? cleanQuizText(values[0]) : "Question unavailable",
+                options: options,
+                answer: answer
+            };
+        }
+
+        function renderTodayQuiz(data) {
+            const list = document.getElementById("todayQuizList");
+            const status = document.getElementById("todayStatus");
+            const keys = Object.keys(data || {})
+                .filter(function (key) { return /^Q\d+$/i.test(key); })
+                .sort(function (a, b) {
+                    return parseInt(a.replace(/\D/g, ""), 10) -
+                        parseInt(b.replace(/\D/g, ""), 10);
+                });
+
+            if (!keys.length) {
+                status.textContent = "No quiz questions are published for today.";
+                list.innerHTML = '<div class="today-empty">Please check back soon for today’s quiz.</div>';
+                return;
+            }
+
+            status.textContent = keys.length + (keys.length === 1 ? " question" : " questions") + " available today";
+            keys.forEach(function (key, index) {
+                const quiz = parseTodayQuestion(data[key]);
+                const card = document.createElement("article");
+                card.className = "today-question";
+
+                const title = document.createElement("div");
+                title.className = "today-question-title";
+                title.innerHTML = '<span class="today-number">' + (index + 1) + "</span>";
+                const questionText = document.createElement("span");
+                questionText.textContent = quiz.question;
+                title.appendChild(questionText);
+                card.appendChild(title);
+
+                if (quiz.options.length) {
+                    const options = document.createElement("div");
+                    options.className = "today-options";
+                    quiz.options.forEach(function (option) {
+                        const optionElement = document.createElement("div");
+                        optionElement.className = "today-option" + (option.correct ? " correct" : "");
+                        optionElement.textContent = option.text + (option.correct ? " ✓" : "");
+                        options.appendChild(optionElement);
+                    });
+                    card.appendChild(options);
+                }
+
+                const answer = document.createElement("div");
+                answer.className = "today-answer";
+                answer.textContent = "Correct answer: " + quiz.answer;
+                card.appendChild(answer);
+                list.appendChild(card);
+            });
+        }
+
+        fetch(todayQuizPath, { cache: "no-store" })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error("Quiz request failed: " + response.status);
+                }
+                return response.json();
+            })
+            .then(renderTodayQuiz)
+            .catch(function (error) {
+                console.error("Today’s quiz error:", error);
+                document.getElementById("todayStatus").textContent = "Unable to load today’s quiz right now.";
+                document.getElementById("todayQuizList").innerHTML =
+                    '<div class="today-empty">Please try again later.</div>';
+            });
+    </script>
 </body>
-
 </html>
