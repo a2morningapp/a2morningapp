@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>Quiz Result</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    min-height:100vh;
+    padding:14px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:linear-gradient(135deg,#eef2ff,#f8fafc,#eef2ff);
+    color:#172033;
+}
+
+.container{
+    width:100%;
+    max-width:680px;
+    margin:auto;
+}
+
+/* RESULT CARD */
+
+.result-card{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:25px;
+    padding:22px;
+    box-shadow:0 15px 45px rgba(15,23,42,.09);
+}
+
+.result-top{
+    text-align:center;
+}
+
+.result-icon{
+    width:70px;
+    height:70px;
+    margin:auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:21px;
+    font-size:34px;
+    background:linear-gradient(135deg,#eef2ff,#ede9fe);
+}
+
+.result-title{
+    margin-top:12px;
+    font-size:24px;
+    font-weight:850;
+    color:#111827;
+}
+
+.result-subtitle{
+    margin-top:4px;
+    font-size:11px;
+    color:#6b7280;
+}
+
+/* SCORE */
+
+.score-box{
+    margin-top:20px;
+    padding:18px;
+    text-align:center;
+    border-radius:18px;
+    background:linear-gradient(135deg,#eef2ff,#f5f3ff);
+    border:1px solid #ddd6fe;
+}
+
+.score-label{
+    font-size:9px;
+    font-weight:800;
+    color:#6366f1;
+    text-transform:uppercase;
+    letter-spacing:.8px;
+}
+
+.score-value{
+    margin-top:4px;
+    font-size:35px;
+    font-weight:900;
+    color:#4338ca;
+}
+
+.score-percent{
+    margin-top:3px;
+    font-size:10px;
+    color:#6b7280;
+}
+
+/* STATS */
+
+.stats{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:12px;
+}
+
+.stat{
+    padding:13px;
+    text-align:center;
+    border-radius:14px;
+    background:#f8fafc;
+    border:1px solid #edf0f4;
+}
+
+.stat-label{
+    font-size:8px;
+    color:#9ca3af;
+    font-weight:800;
+    text-transform:uppercase;
+}
+
+.stat-value{
+    margin-top:3px;
+    font-size:18px;
+    font-weight:850;
+    color:#374151;
+}
+
+/* PROGRESS */
+
+.progress-area{
+    margin-top:17px;
+}
+
+.progress-top{
+    display:flex;
+    justify-content:space-between;
+    font-size:9px;
+    color:#6b7280;
+    font-weight:700;
+}
+
+.progress-bar{
+    width:100%;
+    height:7px;
+    margin-top:7px;
+    overflow:hidden;
+    border-radius:20px;
+    background:#e5e7eb;
+}
+
+.progress-fill{
+    width:0%;
+    height:100%;
+    border-radius:20px;
+    background:linear-gradient(90deg,#4f46e5,#7c3aed);
+    transition:width .8s ease;
+}
+
+/* SECTION */
+
+.section-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:20px 3px 10px;
+}
+
+.section-name{
+    font-size:15px;
+    font-weight:850;
+}
+
+.section-count{
+    padding:5px 9px;
+    border-radius:20px;
+    background:#eef2ff;
+    color:#4f46e5;
+    font-size:9px;
+    font-weight:750;
+}
+
+/* LOADING */
+
+.loading{
+    padding:35px 20px;
+    text-align:center;
+    background:white;
+    border:1px solid #e5e7eb;
+    border-radius:20px;
+}
+
+.spinner{
+    width:38px;
+    height:38px;
+    margin:auto;
+    border:4px solid #e5e7eb;
+    border-top-color:#6366f1;
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+}
+
+@keyframes spin{
+    to{
+        transform:rotate(360deg);
+    }
+}
+
+.loading-text{
+    margin-top:13px;
+    font-size:11px;
+    color:#6b7280;
+}
+
+/* QUESTIONS */
+
+.question-list{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.question-card{
+    padding:17px;
+    background:white;
+    border:1px solid #e5e7eb;
+    border-radius:19px;
+    box-shadow:0 7px 23px rgba(15,23,42,.055);
+    animation:slideUp .35s ease both;
+}
+
+@keyframes slideUp{
+    from{
+        opacity:0;
+        transform:translateY(10px);
+    }
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+.question-header{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+}
+
+.question-number{
+    min-width:34px;
+    width:34px;
+    height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:11px;
+    color:white;
+    font-size:10px;
+    font-weight:850;
+    background:linear-gradient(135deg,#4f46e5,#7c3aed);
+}
+
+.question{
+    padding-top:2px;
+    font-size:12px;
+    line-height:1.55;
+    font-weight:750;
+    color:#1f2937;
+}
+
+/* OPTIONS */
+
+.options{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin-top:13px;
+}
+
+.option{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    min-height:38px;
+    padding:7px 9px;
+    border-radius:10px;
+    background:#f8fafc;
+    color:#64748b;
+    font-size:10px;
+    border:1px solid transparent;
+}
+
+.option.correct{
+    background:#ecfdf5;
+    color:#047857;
+    border-color:#a7f3d0;
+    font-weight:750;
+}
+
+.option-letter{
+    min-width:25px;
+    width:25px;
+    height:25px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:7px;
+    background:#e5e7eb;
+    color:#64748b;
+    font-size:9px;
+    font-weight:800;
+}
+
+.option.correct .option-letter{
+    background:#10b981;
+    color:white;
+}
+
+.option-text{
+    flex:1;
+    line-height:1.4;
+    word-break:break-word;
+}
+
+.correct-mark{
+    font-size:9px;
+    white-space:nowrap;
+    color:#059669;
+    font-weight:850;
+}
+
+/* ANSWER */
+
+.answer-box{
+    display:flex;
+    align-items:flex-start;
+    gap:9px;
+    margin-top:12px;
+    padding:11px;
+    border-radius:12px;
+    background:#f0fdf4;
+    border:1px solid #bbf7d0;
+}
+
+.answer-icon{
+    min-width:25px;
+    width:25px;
+    height:25px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:8px;
+    background:#10b981;
+    color:white;
+    font-size:11px;
+    font-weight:900;
+}
+
+.answer-content{
+    flex:1;
+}
+
+.answer-label{
+    font-size:8px;
+    color:#059669;
+    font-weight:850;
+    text-transform:uppercase;
+    letter-spacing:.5px;
+}
+
+.answer{
+    margin-top:3px;
+    font-size:11px;
+    line-height:1.5;
+    color:#065f46;
+    font-weight:750;
+    word-break:break-word;
+}
+
+/* ERROR */
+
+.error{
+    display:none;
+    padding:28px 20px;
+    text-align:center;
+    background:#fff;
+    border:1px solid #fecaca;
+    border-radius:20px;
+}
+
+.error-icon{
+    font-size:35px;
+}
+
+.error-title{
+    margin-top:8px;
+    font-size:16px;
+    font-weight:850;
+    color:#dc2626;
+}
+
+.error-text{
+    margin-top:7px;
+    font-size:10px;
+    color:#6b7280;
+}
+
+/* EMPTY */
+
+.empty{
+    display:none;
+    padding:35px 20px;
+    text-align:center;
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:20px;
+}
+
+.empty-icon{
+    font-size:35px;
+}
+
+.empty-text{
+    margin-top:9px;
+    font-size:11px;
+    color:#6b7280;
+}
+
+.footer{
+    margin-top:20px;
+    padding-bottom:5px;
+    text-align:center;
+    font-size:9px;
+    color:#9ca3af;
+}
+
+@media(max-width:450px){
+
+    body{
+        padding:10px 8px 25px;
+    }
+
+    .result-card{
+        padding:19px;
+        border-radius:22px;
+    }
+
+    .result-title{
+        font-size:22px;
+    }
+
+    .score-value{
+        font-size:31px;
+    }
+
+    .question-card{
+        padding:14px;
+        border-radius:17px;
+    }
+
+    .question{
+        font-size:11px;
+    }
+}
+
+</style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+
+<!-- ================= RESULT ================= -->
+
+<div class="result-card">
+
+    <div class="result-top">
+
+        <div class="result-icon">
+            🏆
+        </div>
+
+        <div class="result-title">
+            Quiz Result
+        </div>
+
+        <div class="result-subtitle">
+            Your performance summary
+        </div>
+
+    </div>
+
+
+    <div class="score-box">
+
+        <div class="score-label">
+            Your Score
+        </div>
+
+        <div
+            class="score-value"
+            id="scoreValue">
+
+            —
+
+        </div>
+
+        <div
+            class="score-percent"
+            id="scorePercent">
+
+            Loading...
+
+        </div>
+
+    </div>
+
+
+    <div class="stats">
+
+        <div class="stat">
+
+            <div class="stat-label">
+                Total Questions
+            </div>
+
+            <div
+                class="stat-value"
+                id="totalQuestions">
+
+                —
+
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                Correct
+            </div>
+
+            <div
+                class="stat-value"
+                id="correctQuestions">
+
+                —
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="progress-area">
+
+        <div class="progress-top">
+
+            <span>
+                Performance
+            </span>
+
+            <span id="progressText">
+                0%
+            </span>
+
+        </div>
+
+
+        <div class="progress-bar">
+
+            <div
+                class="progress-fill"
+                id="progressFill">
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- ================= TITLE ================= -->
+
+<div class="section-title">
+
+    <div class="section-name">
+        Questions & Answers
+    </div>
+
+    <div
+        class="section-count"
+        id="sectionCount">
+
+        0 Questions
+
+    </div>
+
+</div>
+
+
+<!-- ================= LOADING ================= -->
+
+<div
+    class="loading"
+    id="loading">
+
+    <div class="spinner"></div>
+
+    <div class="loading-text">
+        Loading quiz questions...
+    </div>
+
+</div>
+
+
+<!-- ================= ERROR ================= -->
+
+<div
+    class="error"
+    id="error">
+
+    <div class="error-icon">
+        ⚠️
+    </div>
+
+    <div class="error-title">
+        Unable to Load Quiz
+    </div>
+
+    <div
+        class="error-text"
+        id="errorText">
+
+    </div>
+
+</div>
+
+
+<!-- ================= EMPTY ================= -->
+
+<div
+    class="empty"
+    id="empty">
+
+    <div class="empty-icon">
+        📭
+    </div>
+
+    <div class="empty-text">
+        No quiz questions found.
+    </div>
+
+</div>
+
+
+<!-- ================= QUESTIONS ================= -->
+
+<div
+    class="question-list"
+    id="questionList">
+</div>
+
+
+<div class="footer">
+    © 2026 Bombay Web App
+</div>
+
+
+</div>
+
+
+<script>
+
+/* =====================================================
+   FIREBASE CONFIG
+===================================================== */
+
+const firebaseConfig = {
+
+    apiKey:
+        "AIzaSyAOywqJL5MKxfoXqpgLBqExGsdIIuX8Dwg",
+
+    authDomain:
+        "bombay-web-app.firebaseapp.com",
+
+    databaseURL:
+        "https://bombay-web-app-default-rtdb.firebaseio.com",
+
+    projectId:
+        "bombay-web-app",
+
+    storageBucket:
+        "bombay-web-app.firebasestorage.app",
+
+    messagingSenderId:
+        "171899517098",
+
+    appId:
+        "1:171899517098:web:8eea7c957214396cb4f8d3",
+
+    measurementId:
+        "G-9SK60S83YG"
+
+};
+
+
+/* =====================================================
+   DATABASE
+===================================================== */
+
+const DATABASE_URL =
+    firebaseConfig.databaseURL;
+
+
+/* =====================================================
+   IMPORTANT:
+   YOUR EXACT FIREBASE PATH
+===================================================== */
+
+const QUIZ_PATH =
+    DATABASE_URL +
+    "/Special%20Quizz/Quiz1.json";
+
+
+/* =====================================================
+   GET SCORE FROM URL
+=====================================================
+
+Example:
+
+result.html?score=8
+
+===================================================== */
+
+const urlParams =
+    new URLSearchParams(
+        window.location.search
+    );
+
+
+const scoreParameter =
+    urlParams.get("score");
+
+
+let userScore =
+    parseInt(
+        scoreParameter,
+        10
+    );
+
+
+/* Invalid score = 0 */
+
+if (
+    isNaN(userScore) ||
+    userScore < 0
+) {
+
+    userScore = 0;
+
+}
+
+
+/* =====================================================
+   LOAD FIREBASE
+===================================================== */
+
+async function loadQuiz(){
+
+    try{
+
+        const response =
+            await fetch(
+                QUIZ_PATH,
+                {
+                    method:"GET",
+                    cache:"no-store"
+                }
+            );
+
+
+        if(!response.ok){
+
+            throw new Error(
+                "Firebase request failed: " +
+                response.status
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        console.log(
+            "Firebase Quiz Data:",
+            data
+        );
+
+
+        /* =============================================
+           CHECK DATA
+        ============================================= */
+
+        if(
+            !data ||
+            typeof data !== "object"
+        ){
+
+            showEmpty();
+
+            return;
+
+        }
+
+
+        /* =============================================
+           FIND Q1,Q2,Q3...
+        ============================================= */
+
+        const questionKeys =
+            Object.keys(data)
+            .filter(
+                key =>
+                    /^Q\d+$/i.test(key)
+            )
+            .sort(
+                (a,b) => {
+
+                    const numberA =
+                        parseInt(
+                            a.replace(
+                                /\D/g,
+                                ""
+                            ),
+                            10
+                        );
+
+
+                    const numberB =
+                        parseInt(
+                            b.replace(
+                                /\D/g,
+                                ""
+                            ),
+                            10
+                        );
+
+
+                    return numberA - numberB;
+
+                }
+            );
+
+
+        /* =============================================
+           TOTAL QUESTIONS
+        ============================================= */
+
+        const totalQuestions =
+            questionKeys.length;
+
+
+        if(
+            totalQuestions === 0
+        ){
+
+            showEmpty();
+
+            return;
+
+        }
+
+
+        /* =============================================
+           PREVENT SCORE > TOTAL
+        ============================================= */
+
+        if(
+            userScore >
+            totalQuestions
+        ){
+
+            userScore =
+                totalQuestions;
+
+        }
+
+
+        /* =============================================
+           PERCENTAGE
+        ============================================= */
+
+        const percentage =
+            Math.round(
+                (
+                    userScore /
+                    totalQuestions
+                ) * 100
+            );
+
+
+        /* =============================================
+           DISPLAY SCORE
+        ============================================= */
+
+        document.getElementById(
+            "scoreValue"
+        ).textContent =
+            userScore +
+            " / " +
+            totalQuestions;
+
+
+        document.getElementById(
+            "scorePercent"
+        ).textContent =
+            percentage +
+            "% correct";
+
+
+        /* =============================================
+           TOTAL QUESTIONS
+        ============================================= */
+
+        document.getElementById(
+            "totalQuestions"
+        ).textContent =
+            totalQuestions;
+
+
+        /* =============================================
+           CORRECT
+           
+           This is the score parameter.
+        ============================================= */
+
+        document.getElementById(
+            "correctQuestions"
+        ).textContent =
+            userScore;
+
+
+        /* =============================================
+           PROGRESS
+        ============================================= */
+
+        document.getElementById(
+            "progressText"
+        ).textContent =
+            percentage +
+            "%";
+
+
+        setTimeout(
+            function(){
+
+                document.getElementById(
+                    "progressFill"
+                ).style.width =
+                    percentage +
+                    "%";
+
+            },
+            100
+        );
+
+
+        /* =============================================
+           QUESTION COUNT
+        ============================================= */
+
+        document.getElementById(
+            "sectionCount"
+        ).textContent =
+            totalQuestions +
+            (
+                totalQuestions === 1
+                    ? " Question"
+                    : " Questions"
+            );
+
+
+        /* =============================================
+           CREATE QUESTIONS
+        ============================================= */
+
+        const list =
+            document.getElementById(
+                "questionList"
+            );
+
+
+        list.innerHTML = "";
+
+
+        questionKeys.forEach(
+            function(key,index){
+
+                const questionData =
+                    parseQuestion(
+                        data[key]
+                    );
+
+
+                createQuestionCard(
+                    questionData,
+                    index + 1,
+                    list
+                );
+
+            }
+        );
+
+
+        /* =============================================
+           HIDE LOADING
+        ============================================= */
+
+        document.getElementById(
+            "loading"
+        ).style.display =
+            "none";
+
+    }
+
+
+    catch(error){
+
+        console.error(
+            "Firebase Error:",
+            error
+        );
+
+
+        showError(
+            error.message
+        );
+
+    }
+
+}
+
+
+/* =====================================================
+   PARSE QUESTION
+===================================================== */
+
+function parseQuestion(rawData){
+
+    let array = [];
+
+
+    /* Firebase Array */
+
+    if(
+        Array.isArray(rawData)
+    ){
+
+        array =
+            rawData;
+
+    }
+
+
+    /* Firebase JSON String */
+
+    else if(
+        typeof rawData === "string"
+    ){
+
+        let text =
+            rawData.trim();
+
+
+        try{
+
+            array =
+                JSON.parse(text);
+
+        }
+
+        catch(error){
+
+            try{
+
+                text =
+                    text.replace(
+                        /^"+|"+$/g,
+                        ""
+                    );
+
+
+                array =
+                    JSON.parse(text);
+
+            }
+
+            catch(error2){
+
+                console.error(
+                    "Cannot parse:",
+                    rawData
+                );
+
+                array = [];
+
+            }
+
+        }
+
+    }
+
+
+    /* =============================================
+       QUESTION
+    ============================================= */
+
+    const question =
+        array.length > 0
+            ? cleanText(array[0])
+            : "Question unavailable";
+
+
+    /* =============================================
+       OPTIONS
+    ============================================= */
+
+    const options = [];
+
+
+    let correctAnswer =
+        "Answer not available";
+
+
+    for(
+        let i = 1;
+        i < array.length;
+        i++
+    ){
+
+        let option =
+            cleanText(
+                array[i]
+            );
+
+
+        /* =========================================
+           FIND ===true
+        ========================================= */
+
+        const isCorrect =
+            /===true/i.test(
+                option
+            );
+
+
+        /* =========================================
+           REMOVE ===true
+        ========================================= */
+
+        const cleanOption =
+            option
+            .replace(
+                /===true/gi,
+                ""
+            )
+            .trim();
+
+
+        options.push({
+
+            text:
+                cleanOption,
+
+            correct:
+                isCorrect
+
+        });
+
+
+        if(
+            isCorrect
+        ){
+
+            correctAnswer =
+                cleanOption;
+
+        }
+
+    }
+
+
+    return {
+
+        question:
+            question,
+
+        options:
+            options,
+
+        answer:
+            correctAnswer
+
+    };
+
+}
+
+
+/* =====================================================
+   CLEAN TEXT
+===================================================== */
+
+function cleanText(value){
+
+    if(
+        value === null ||
+        value === undefined
+    ){
+
+        return "";
+
+    }
+
+
+    let text =
+        String(value).trim();
+
+
+    while(
+
+        text.length >= 2 &&
+
+        (
+            (
+                text.startsWith('"') &&
+                text.endsWith('"')
+            )
+            ||
+            (
+                text.startsWith("'") &&
+                text.endsWith("'")
+            )
+        )
+
+    ){
+
+        text =
+            text.substring(
+                1,
+                text.length - 1
+            ).trim();
+
+    }
+
+
+    return text;
+
+}
+
+
+/* =====================================================
+   CREATE QUESTION CARD
+===================================================== */
+
+function createQuestionCard(
+    data,
+    number,
+    container
+){
+
+    const card =
+        document.createElement(
+            "div"
+        );
+
+
+    card.className =
+        "question-card";
+
+
+    card.style.animationDelay =
+        Math.min(
+            number * .035,
+            .5
+        ) +
+        "s";
+
+
+    /* =============================================
+       HEADER
+    ============================================= */
+
+    const header =
+        document.createElement(
+            "div"
+        );
+
+
+    header.className =
+        "question-header";
+
+
+    /* NUMBER */
+
+    const numberElement =
+        document.createElement(
+            "div"
+        );
+
+
+    numberElement.className =
+        "question-number";
+
+
+    numberElement.textContent =
+        number;
+
+
+    /* QUESTION */
+
+    const question =
+        document.createElement(
+            "div"
+        );
+
+
+    question.className =
+        "question";
+
+
+    question.textContent =
+        data.question;
+
+
+    header.appendChild(
+        numberElement
+    );
+
+
+    header.appendChild(
+        question
+    );
+
+
+    card.appendChild(
+        header
+    );
+
+
+    /* =============================================
+       OPTIONS
+    ============================================= */
+
+    if(
+        data.options.length > 0
+    ){
+
+        const optionsContainer =
+            document.createElement(
+                "div"
+            );
+
+
+        optionsContainer.className =
+            "options";
+
+
+        const letters =
+            [
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "H"
+            ];
+
+
+        data.options.forEach(
+            function(
+                option,
+                index
+            ){
+
+                const optionElement =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                optionElement.className =
+                    "option";
+
+
+                if(
+                    option.correct
+                ){
+
+                    optionElement.classList.add(
+                        "correct"
+                    );
+
+                }
+
+
+                /* LETTER */
+
+                const letter =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                letter.className =
+                    "option-letter";
+
+
+                letter.textContent =
+                    letters[index] ||
+                    (index + 1);
+
+
+                /* TEXT */
+
+                const optionText =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                optionText.className =
+                    "option-text";
+
+
+                optionText.textContent =
+                    option.text;
+
+
+                optionElement.appendChild(
+                    letter
+                );
+
+
+                optionElement.appendChild(
+                    optionText
+                );
+
+
+                /* CORRECT */
+
+                if(
+                    option.correct
+                ){
+
+                    const mark =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    mark.className =
+                        "correct-mark";
+
+
+                    mark.textContent =
+                        "✓ Correct";
+
+
+                    optionElement.appendChild(
+                        mark
+                    );
+
+                }
+
+
+                optionsContainer.appendChild(
+                    optionElement
+                );
+
+            }
+        );
+
+
+        card.appendChild(
+            optionsContainer
+        );
+
+    }
+
+
+    /* =============================================
+       CORRECT ANSWER BOX
+    ============================================= */
+
+    const answerBox =
+        document.createElement(
+            "div"
+        );
+
+
+    answerBox.className =
+        "answer-box";
+
+
+    const answerIcon =
+        document.createElement(
+            "div"
+        );
+
+
+    answerIcon.className =
+        "answer-icon";
+
+
+    answerIcon.textContent =
+        "✓";
+
+
+    const answerContent =
+        document.createElement(
+            "div"
+        );
+
+
+    answerContent.className =
+        "answer-content";
+
+
+    const answerLabel =
+        document.createElement(
+            "div"
+        );
+
+
+    answerLabel.className =
+        "answer-label";
+
+
+    answerLabel.textContent =
+        "Correct Answer";
+
+
+    const answer =
+        document.createElement(
+            "div"
+        );
+
+
+    answer.className =
+        "answer";
+
+
+    answer.textContent =
+        data.answer;
+
+
+    answerContent.appendChild(
+        answerLabel
+    );
+
+
+    answerContent.appendChild(
+        answer
+    );
+
+
+    answerBox.appendChild(
+        answerIcon
+    );
+
+
+    answerBox.appendChild(
+        answerContent
+    );
+
+
+    card.appendChild(
+        answerBox
+    );
+
+
+    container.appendChild(
+        card
+    );
+
+}
+
+
+/* =====================================================
+   EMPTY
+===================================================== */
+
+function showEmpty(){
+
+    document.getElementById(
+        "loading"
+    ).style.display =
+        "none";
+
+
+    document.getElementById(
+        "empty"
+    ).style.display =
+        "block";
+
+
+    document.getElementById(
+        "scoreValue"
+    ).textContent =
+        "0 / 0";
+
+
+    document.getElementById(
+        "scorePercent"
+    ).textContent =
+        "0% correct";
+
+
+    document.getElementById(
+        "totalQuestions"
+    ).textContent =
+        "0";
+
+
+    document.getElementById(
+        "correctQuestions"
+    ).textContent =
+        "0";
+
+}
+
+
+/* =====================================================
+   ERROR
+===================================================== */
+
+function showError(message){
+
+    document.getElementById(
+        "loading"
+    ).style.display =
+        "none";
+
+
+    document.getElementById(
+        "error"
+    ).style.display =
+        "block";
+
+
+    document.getElementById(
+        "errorText"
+    ).textContent =
+        message;
+
+}
+
+
+/* =====================================================
+   START
+===================================================== */
+
+loadQuiz();
+
+</script>
+
+</body>
+</html>

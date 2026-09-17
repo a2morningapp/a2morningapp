@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Rewards Center</title>
+
+<style>
+
+/* =====================================================
+   BASIC RESET
+===================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Arial,
+        sans-serif;
+
+    background: #f4f7fb;
+    color: #172033;
+
+    min-height: 100vh;
+
+    transition: background .3s, color .3s;
+}
+
+
+/* =====================================================
+   DARK MODE
+===================================================== */
+
+body.dark {
+    background: #0f172a;
+    color: #f8fafc;
+}
+
+body.dark .card,
+body.dark .coupon,
+body.dark .info-card,
+body.dark .how-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+body.dark .coupon-title,
+body.dark .section-title,
+body.dark .coin-value,
+body.dark .info-value {
+    color: #f8fafc;
+}
+
+body.dark .description,
+body.dark .coin-label,
+body.dark .info-label,
+body.dark .section-subtitle {
+    color: #94a3b8;
+}
+
+body.dark .locked-box,
+body.dark .code-box {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+
+/* =====================================================
+   HEADER
+===================================================== */
+
+.header {
+
+    height: 250px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #4f46e5,
+            #7c3aed,
+            #9333ea
+        );
+
+    color: white;
+
+    border-radius: 0 0 38px 38px;
+
+    position: relative;
+
+    overflow: hidden;
+
+    padding: 22px 18px;
+}
+
+.header::before {
+
+    content: "";
+
+    position: absolute;
+
+    width: 260px;
+    height: 260px;
+
+    border-radius: 50%;
+
+    background:
+        rgba(255,255,255,.08);
+
+    right: -90px;
+    top: -100px;
+}
+
+.header::after {
+
+    content: "";
+
+    position: absolute;
+
+    width: 190px;
+    height: 190px;
+
+    border-radius: 50%;
+
+    background:
+        rgba(255,255,255,.06);
+
+    left: -90px;
+    bottom: -120px;
+}
+
+
+/* =====================================================
+   HEADER CONTENT
+===================================================== */
+
+.header-content {
+
+    max-width: 560px;
+
+    margin: auto;
+
+    position: relative;
+
+    z-index: 2;
+}
+
+.top-bar {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+}
+
+.brand {
+
+    font-size: 15px;
+
+    font-weight: 750;
+}
+
+.header-buttons {
+
+    display: flex;
+
+    gap: 8px;
+}
+
+.header-btn {
+
+    width: 38px;
+    height: 38px;
+
+    border: none;
+
+    border-radius: 12px;
+
+    background:
+        rgba(255,255,255,.15);
+
+    color: white;
+
+    font-size: 17px;
+
+    cursor: pointer;
+
+    backdrop-filter: blur(10px);
+}
+
+.header-main {
+
+    margin-top: 35px;
+}
+
+.header-title {
+
+    font-size: 29px;
+
+    font-weight: 850;
+
+    letter-spacing: -.5px;
+}
+
+.header-subtitle {
+
+    font-size: 13px;
+
+    opacity: .82;
+
+    margin-top: 7px;
+}
+
+
+/* =====================================================
+   MAIN
+===================================================== */
+
+.main {
+
+    width: 100%;
+
+    max-width: 560px;
+
+    margin: -65px auto 30px;
+
+    padding: 0 17px;
+
+    position: relative;
+
+    z-index: 5;
+}
+
+
+/* =====================================================
+   MAIN CARD
+===================================================== */
+
+.card {
+
+    background: white;
+
+    border-radius: 24px;
+
+    border: 1px solid #edf0f5;
+
+    box-shadow:
+        0 16px 45px rgba(31,41,55,.12);
+
+    transition:
+        background .3s,
+        border .3s;
+}
+
+
+/* =====================================================
+   COIN CARD
+===================================================== */
+
+.coin-card {
+
+    padding: 20px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 15px;
+}
+
+.coin-left {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 13px;
+}
+
+.coin-icon {
+
+    width: 60px;
+    height: 60px;
+
+    border-radius: 18px;
+
+    background: #fff7d6;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    font-size: 29px;
+
+    box-shadow:
+        0 5px 15px rgba(234,179,8,.12);
+}
+
+.coin-label {
+
+    font-size: 11px;
+
+    color: #6b7280;
+
+    font-weight: 600;
+
+    letter-spacing: .5px;
+}
+
+.coin-value {
+
+    font-size: 28px;
+
+    font-weight: 850;
+
+    color: #111827;
+
+    margin-top: 2px;
+}
+
+.coin-text {
+
+    font-size: 11px;
+
+    color: #9ca3af;
+}
+
+.refresh-btn {
+
+    border: none;
+
+    width: 39px;
+    height: 39px;
+
+    border-radius: 12px;
+
+    background: #eef2ff;
+
+    color: #4f46e5;
+
+    cursor: pointer;
+
+    font-size: 17px;
+}
+
+
+/* =====================================================
+   USER INFO
+===================================================== */
+
+.user-info {
+
+    margin-top: 12px;
+
+    padding: 14px 18px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+}
+
+.user-name {
+
+    font-size: 13px;
+
+    font-weight: 750;
+}
+
+.user-mobile {
+
+    font-size: 11px;
+
+    color: #6b7280;
+
+    margin-top: 3px;
+}
+
+.verified {
+
+    background: #ecfdf5;
+
+    color: #059669;
+
+    padding: 6px 10px;
+
+    border-radius: 20px;
+
+    font-size: 10px;
+
+    font-weight: 700;
+}
+
+
+/* =====================================================
+   SECTION
+===================================================== */
+
+.section {
+
+    margin-top: 26px;
+}
+
+.section-title {
+
+    font-size: 20px;
+
+    font-weight: 820;
+
+    color: #111827;
+
+    margin-bottom: 5px;
+}
+
+.section-subtitle {
+
+    font-size: 12px;
+
+    color: #6b7280;
+
+    margin-bottom: 14px;
+
+    line-height: 1.5;
+}
+
+
+/* =====================================================
+   REWARD PROGRESS
+===================================================== */
+
+.progress-card {
+
+    padding: 18px;
+
+    margin-bottom: 18px;
+}
+
+.progress-header {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    margin-bottom: 11px;
+}
+
+.progress-title {
+
+    font-size: 13px;
+
+    font-weight: 750;
+}
+
+.progress-target {
+
+    font-size: 12px;
+
+    color: #4f46e5;
+
+    font-weight: 750;
+}
+
+.progress-bar {
+
+    width: 100%;
+
+    height: 10px;
+
+    background: #e5e7eb;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+}
+
+.progress-fill {
+
+    width: 0%;
+
+    height: 100%;
+
+    border-radius: 20px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #4f46e5,
+            #9333ea
+        );
+
+    transition:
+        width 1.2s cubic-bezier(.22,1,.36,1);
+}
+
+.progress-footer {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    margin-top: 9px;
+
+    font-size: 10px;
+
+    color: #6b7280;
+}
+
+
+/* =====================================================
+   UNLOCK COUNT
+===================================================== */
+
+.unlock-count {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3,1fr);
+
+    gap: 9px;
+
+    margin-bottom: 18px;
+}
+
+.mini-stat {
+
+    padding: 13px 8px;
+
+    text-align: center;
+
+    background: white;
+
+    border: 1px solid #edf0f5;
+
+    border-radius: 16px;
+}
+
+body.dark .mini-stat {
+
+    background: #1e293b;
+
+    border-color: #334155;
+}
+
+.mini-icon {
+
+    font-size: 19px;
+
+    margin-bottom: 4px;
+}
+
+.mini-value {
+
+    font-size: 17px;
+
+    font-weight: 800;
+}
+
+.mini-label {
+
+    font-size: 9px;
+
+    color: #6b7280;
+
+    margin-top: 3px;
+}
+
+
+/* =====================================================
+   COUPON CARD
+===================================================== */
+
+.coupon {
+
+    background: white;
+
+    border-radius: 21px;
+
+    padding: 18px;
+
+    margin-bottom: 14px;
+
+    border: 1px solid #edf0f5;
+
+    box-shadow:
+        0 7px 22px rgba(31,41,55,.055);
+
+    position: relative;
+
+    overflow: hidden;
+
+    transition:
+        transform .25s,
+        box-shadow .25s,
+        background .3s,
+        border .3s;
+
+    animation:
+        slideUp .45s ease both;
+}
+
+.coupon:hover {
+
+    transform:
+        translateY(-2px);
+
+    box-shadow:
+        0 12px 30px rgba(31,41,55,.10);
+}
+
+.coupon::before {
+
+    content: "";
+
+    position: absolute;
+
+    top: 0;
+    bottom: 0;
+    left: 0;
+
+    width: 5px;
+
+    background:
+        linear-gradient(
+            180deg,
+            #4f46e5,
+            #9333ea
+        );
+}
+
+.coupon.locked::before {
+
+    background: #cbd5e1;
+}
+
+
+/* =====================================================
+   COUPON TOP
+===================================================== */
+
+.coupon-top {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    gap: 10px;
+}
+
+.coupon-left {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    min-width: 0;
+}
+
+.coupon-icon {
+
+    width: 50px;
+    height: 50px;
+
+    flex-shrink: 0;
+
+    border-radius: 15px;
+
+    background: #eef2ff;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 24px;
+}
+
+.coupon.locked .coupon-icon {
+
+    background: #f1f5f9;
+
+    filter: grayscale(1);
+}
+
+.coupon-title {
+
+    font-size: 14px;
+
+    font-weight: 800;
+
+    color: #111827;
+}
+
+.description {
+
+    font-size: 10px;
+
+    color: #6b7280;
+
+    margin-top: 4px;
+
+    line-height: 1.4;
+}
+
+
+/* =====================================================
+   REQUIREMENT BADGE
+===================================================== */
+
+.cost {
+
+    flex-shrink: 0;
+
+    padding: 7px 9px;
+
+    border-radius: 20px;
+
+    background: #fff7d6;
+
+    color: #a16207;
+
+    font-size: 10px;
+
+    font-weight: 800;
+}
+
+.cost.unlocked {
+
+    background: #ecfdf5;
+
+    color: #059669;
+}
+
+
+/* =====================================================
+   STATUS
+===================================================== */
+
+.status {
+
+    margin-top: 14px;
+
+    border-radius: 11px;
+
+    padding: 9px 11px;
+
+    font-size: 10px;
+
+    font-weight: 650;
+}
+
+.status.unlocked {
+
+    background: #ecfdf5;
+
+    color: #059669;
+}
+
+.status.locked {
+
+    background: #fef2f2;
+
+    color: #dc2626;
+}
+
+
+/* =====================================================
+   LOCKED
+===================================================== */
+
+.locked-box {
+
+    margin-top: 12px;
+
+    background: #f8fafc;
+
+    border: 1px dashed #d5dbe5;
+
+    border-radius: 14px;
+
+    text-align: center;
+
+    padding: 14px;
+
+    color: #94a3b8;
+
+    font-size: 11px;
+}
+
+.lock-icon {
+
+    font-size: 25px;
+
+    margin-bottom: 5px;
+}
+
+.locked-small {
+
+    font-size: 9px;
+
+    margin-top: 5px;
+
+    color: #a1a9b5;
+}
+
+
+/* =====================================================
+   CODE
+===================================================== */
+
+.reward-box {
+
+    margin-top: 12px;
+
+    background: #f8fafc;
+
+    border-radius: 15px;
+
+    padding: 12px;
+}
+
+.code-label {
+
+    font-size: 9px;
+
+    color: #6b7280;
+
+    font-weight: 650;
+
+    margin-bottom: 7px;
+}
+
+.code-row {
+
+    display: flex;
+
+    gap: 7px;
+}
+
+.code-box {
+
+    flex: 1;
+
+    min-width: 0;
+
+    background: white;
+
+    border: 1px solid #e5e7eb;
+
+    border-radius: 10px;
+
+    padding: 10px;
+
+    text-align: center;
+
+    color: #4f46e5;
+
+    font-size: 13px;
+
+    font-weight: 850;
+
+    letter-spacing: 1px;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+}
+
+.copy-btn {
+
+    border: none;
+
+    background: #4f46e5;
+
+    color: white;
+
+    border-radius: 10px;
+
+    padding: 0 13px;
+
+    font-size: 10px;
+
+    font-weight: 750;
+
+    cursor: pointer;
+}
+
+.copy-btn:active {
+
+    transform: scale(.95);
+}
+
+
+/* =====================================================
+   REDEEM BUTTON
+===================================================== */
+
+.redeem-btn {
+
+    width: 100%;
+
+    border: none;
+
+    border-radius: 11px;
+
+    padding: 12px;
+
+    margin-top: 9px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #4f46e5,
+            #7c3aed
+        );
+
+    color: white;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    cursor: pointer;
+
+    transition: transform .2s;
+}
+
+.redeem-btn:active {
+
+    transform: scale(.98);
+}
+
+
+/* =====================================================
+   HOW IT WORKS
+===================================================== */
+
+.how-card {
+
+    background: white;
+
+    border: 1px solid #edf0f5;
+
+    border-radius: 20px;
+
+    padding: 15px 18px;
+}
+
+.step {
+
+    display: flex;
+
+    gap: 12px;
+
+    padding: 10px 0;
+}
+
+.step-number {
+
+    width: 30px;
+    height: 30px;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+
+    background: #eef2ff;
+
+    color: #4f46e5;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 11px;
+
+    font-weight: 800;
+}
+
+.step-title {
+
+    font-size: 12px;
+
+    font-weight: 750;
+}
+
+.step-text {
+
+    font-size: 10px;
+
+    color: #6b7280;
+
+    margin-top: 3px;
+
+    line-height: 1.5;
+}
+
+
+/* =====================================================
+   FOOTER
+===================================================== */
+
+.footer {
+
+    text-align: center;
+
+    padding: 20px 0 28px;
+
+    font-size: 9px;
+
+    color: #9ca3af;
+}
+
+
+/* =====================================================
+   TOAST
+===================================================== */
+
+.toast {
+
+    position: fixed;
+
+    z-index: 999;
+
+    left: 50%;
+
+    bottom: 25px;
+
+    transform:
+        translate(-50%,80px);
+
+    background: #111827;
+
+    color: white;
+
+    padding: 11px 17px;
+
+    border-radius: 12px;
+
+    font-size: 11px;
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    transition: .3s;
+}
+
+.toast.show {
+
+    opacity: 1;
+
+    transform:
+        translate(-50%,0);
+}
+
+
+/* =====================================================
+   CONFETTI
+===================================================== */
+
+.confetti {
+
+    position: fixed;
+
+    width: 7px;
+    height: 12px;
+
+    top: -20px;
+
+    z-index: 1000;
+
+    animation:
+        confettiFall 2.5s linear forwards;
+}
+
+@keyframes confettiFall {
+
+    to {
+
+        transform:
+            translateY(110vh)
+            rotate(720deg);
+
+        opacity: 0;
+
+    }
+
+}
+
+
+/* =====================================================
+   ANIMATION
+===================================================== */
+
+@keyframes slideUp {
+
+    from {
+
+        opacity: 0;
+
+        transform:
+            translateY(15px);
+
+    }
+
+    to {
+
+        opacity: 1;
+
+        transform:
+            translateY(0);
+
+    }
+
+}
+
+
+/* =====================================================
+   SMALL SCREEN
+===================================================== */
+
+@media(max-width:360px) {
+
+    .header-title {
+        font-size: 24px;
+    }
+
+    .coin-value {
+        font-size: 24px;
+    }
+
+    .coupon {
+        padding: 15px;
+    }
+
+    .cost {
+        font-size: 9px;
+        padding: 6px 7px;
+    }
+
+    .coupon-icon {
+        width: 45px;
+        height: 45px;
+        font-size: 21px;
+    }
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<!-- =====================================================
+     HEADER
+===================================================== -->
+
+<div class="header">
+
+    <div class="header-content">
+
+        <div class="top-bar">
+
+            <div class="brand">
+                🎮 Quiz Rewards
+            </div>
+
+            <div class="header-buttons">
+
+                <button
+                    class="header-btn"
+                    onclick="toggleDarkMode()">
+
+                    🌙
+
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="header-main">
+
+            <div class="header-title">
+                Rewards Center
+            </div>
+
+            <div class="header-subtitle">
+                Turn your coins into exclusive coupons.
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     MAIN
+===================================================== -->
+
+<div class="main">
+
+
+    <!-- =================================================
+         COIN BALANCE
+    ================================================= -->
+
+    <div class="card coin-card">
+
+        <div class="coin-left">
+
+            <div class="coin-icon">
+                🪙
+            </div>
+
+            <div>
+
+                <div class="coin-label">
+                    AVAILABLE COINS
+                </div>
+
+                <div
+                    class="coin-value"
+                    id="coinBalance">
+
+                    0
+
+                </div>
+
+                <div class="coin-text">
+                    Keep playing to unlock more rewards
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <button
+            class="refresh-btn"
+            onclick="location.reload()">
+
+            ↻
+
+        </button>
+
+    </div>
+
+
+
+    <!-- =================================================
+         USER
+    ================================================= -->
+
+    <div class="card user-info">
+
+        <div>
+
+            <div
+                class="user-name"
+                id="userName">
+
+                User
+
+            </div>
+
+            <div
+                class="user-mobile"
+                id="userMobile">
+
+                --
+
+            </div>
+
+        </div>
+
+
+        <div class="verified">
+            ✓ VERIFIED
+        </div>
+
+    </div>
+
+
+
+    <!-- =================================================
+         REWARDS
+    ================================================= -->
+
+    <div class="section">
+
+        <div class="section-title">
+            🎁 Available Rewards
+        </div>
+
+        <div class="section-subtitle">
+            Collect coins and unlock exclusive coupon codes.
+        </div>
+
+
+        <!-- NEXT REWARD -->
+
+        <div class="card progress-card">
+
+            <div class="progress-header">
+
+                <div class="progress-title">
+                    Next Coupon
+                </div>
+
+                <div
+                    class="progress-target"
+                    id="nextReward">
+
+                    --
+
+                </div>
+
+            </div>
+
+
+            <div class="progress-bar">
+
+                <div
+                    class="progress-fill"
+                    id="progressFill">
+
+                </div>
+
+            </div>
+
+
+            <div class="progress-footer">
+
+                <span id="progressCurrent">
+                    0 coins
+                </span>
+
+                <span id="progressNeeded">
+                    0 coins
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- UNLOCK STATISTICS -->
+
+        <div class="unlock-count">
+
+            <div class="mini-stat">
+
+                <div class="mini-icon">
+                    🔓
+                </div>
+
+                <div
+                    class="mini-value"
+                    id="unlockedCount">
+
+                    0
+
+                </div>
+
+                <div class="mini-label">
+                    UNLOCKED
+                </div>
+
+            </div>
+
+
+            <div class="mini-stat">
+
+                <div class="mini-icon">
+                    🔒
+                </div>
+
+                <div
+                    class="mini-value"
+                    id="lockedCount">
+
+                    10
+
+                </div>
+
+                <div class="mini-label">
+                    LOCKED
+                </div>
+
+            </div>
+
+
+            <div class="mini-stat">
+
+                <div class="mini-icon">
+                    🎟️
+                </div>
+
+                <div
+                    class="mini-value">
+
+                    10
+
+                </div>
+
+                <div class="mini-label">
+                    TOTAL
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- COUPONS -->
+
+        <div id="couponContainer"></div>
+
+    </div>
+
+
+
+    <!-- =================================================
+         HOW IT WORKS
+    ================================================= -->
+
+    <div class="section">
+
+        <div class="section-title">
+            💡 How It Works
+        </div>
+
+        <div class="section-subtitle">
+            Unlock coupons by reaching coin milestones.
+        </div>
+
+
+        <div class="how-card">
+
+
+            <div class="step">
+
+                <div class="step-number">
+                    1
+                </div>
+
+                <div>
+
+                    <div class="step-title">
+                        🪙 Collect Coins
+                    </div>
+
+                    <div class="step-text">
+                        Play quiz matches and answer questions
+                        to collect coins.
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="step">
+
+                <div class="step-number">
+                    2
+                </div>
+
+                <div>
+
+                    <div class="step-title">
+                        🔓 Unlock Rewards
+                    </div>
+
+                    <div class="step-text">
+                        Every coupon requires a certain number
+                        of coins.
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="step">
+
+                <div class="step-number">
+                    3
+                </div>
+
+                <div>
+
+                    <div class="step-title">
+                        🎟️ Get Your Code
+                    </div>
+
+                    <div class="step-text">
+                        Once unlocked, your unique coupon code
+                        becomes visible.
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="step">
+
+                <div class="step-number">
+                    4
+                </div>
+
+                <div>
+
+                    <div class="step-title">
+                        🚀 Use Coupon
+                    </div>
+
+                    <div class="step-text">
+                        Copy the code and open the reward
+                        website using the button.
+                    </div>
+
+                </div>
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+
+    <div class="footer">
+        © 2026 Quiz Rewards • Keep Playing • Keep Winning
+    </div>
+
+</div>
+
+
+
+<!-- TOAST -->
+
+<div
+    class="toast"
+    id="toast">
+
+    Copied!
+
+</div>
+
+
+
+<script>
+
+/* =====================================================
+   READ KODULAR PARAMETERS
+===================================================== */
+
+const params =
+    new URLSearchParams(
+        window.location.search
+    );
+
+
+/* =====================================================
+   USER DATA
+===================================================== */
+
+const userName =
+    params.get("name") || "User";
+
+const mobile =
+    params.get("mobile") || "Mobile not available";
+
+
+/* =====================================================
+   COINS
+===================================================== */
+
+const coins =
+    parseInt(
+        params.get("coins") || "0"
+    ) || 0;
+
+
+/* =====================================================
+   DISPLAY USER
+===================================================== */
+
+document.getElementById(
+    "userName"
+).textContent =
+    userName;
+
+document.getElementById(
+    "userMobile"
+).textContent =
+    mobile;
+
+
+/* =====================================================
+   DISPLAY COINS
+===================================================== */
+
+document.getElementById(
+    "coinBalance"
+).textContent =
+    coins.toLocaleString();
+
+
+/* =====================================================
+   COUPON LIST
+=====================================================
+
+   CHANGE THESE VALUES TO YOUR OWN.
+
+   requiredCoins = coins required
+   code          = coupon code
+   link          = redirect website
+
+===================================================== */
+
+const coupons = [
+
+    {
+        id: 1,
+        name: "Starter Reward",
+        description: "First milestone reward",
+        icon: "🎁",
+        requiredCoins: 500,
+        code: "START500",
+        link: "https://example.com/reward1"
+    },
+
+    {
+        id: 2,
+        name: "Bronze Reward",
+        description: "Bronze milestone unlocked",
+        icon: "🥉",
+        requiredCoins: 1000,
+        code: "BRONZE1000",
+        link: "https://example.com/reward2"
+    },
+
+    {
+        id: 3,
+        name: "Silver Reward",
+        description: "Silver milestone unlocked",
+        icon: "🥈",
+        requiredCoins: 1500,
+        code: "SILVER1500",
+        link: "https://example.com/reward3"
+    },
+
+    {
+        id: 4,
+        name: "Gold Reward",
+        description: "Gold milestone unlocked",
+        icon: "🥇",
+        requiredCoins: 2000,
+        code: "GOLD2000",
+        link: "https://example.com/reward4"
+    },
+
+    {
+        id: 5,
+        name: "Super Reward",
+        description: "Special player reward",
+        icon: "⭐",
+        requiredCoins: 2500,
+        code: "SUPER2500",
+        link: "https://example.com/reward5"
+    },
+
+    {
+        id: 6,
+        name: "Mega Reward",
+        description: "Mega milestone reward",
+        icon: "💎",
+        requiredCoins: 3000,
+        code: "MEGA3000",
+        link: "https://example.com/reward6"
+    },
+
+    {
+        id: 7,
+        name: "Pro Reward",
+        description: "Exclusive pro reward",
+        icon: "🔥",
+        requiredCoins: 3500,
+        code: "PRO3500",
+        link: "https://example.com/reward7"
+    },
+
+    {
+        id: 8,
+        name: "Elite Reward",
+        description: "Elite player reward",
+        icon: "👑",
+        requiredCoins: 4000,
+        code: "ELITE4000",
+        link: "https://example.com/reward8"
+    },
+
+    {
+        id: 9,
+        name: "Master Reward",
+        description: "Master milestone reward",
+        icon: "🏆",
+        requiredCoins: 4500,
+        code: "MASTER4500",
+        link: "https://example.com/reward9"
+    },
+
+    {
+        id: 10,
+        name: "Legend Reward",
+        description: "Ultimate milestone reward",
+        icon: "👑",
+        requiredCoins: 5000,
+        code: "LEGEND5000",
+        link: "https://example.com/reward10"
+    }
+
+];
+
+
+/* =====================================================
+   CREATE COUPON CARDS
+===================================================== */
+
+const container =
+    document.getElementById(
+        "couponContainer"
+    );
+
+
+let unlocked = 0;
+
+
+coupons.forEach(function(coupon, index) {
+
+    const isUnlocked =
+        coins >= coupon.requiredCoins;
+
+
+    if (isUnlocked) {
+        unlocked++;
+    }
+
+
+    const remaining =
+        coupon.requiredCoins - coins;
+
+
+    const card =
+        document.createElement("div");
+
+
+    card.className =
+        "coupon " +
+        (isUnlocked ? "unlocked" : "locked");
+
+
+    /* =================================================
+       UNLOCKED COUPON
+    ================================================= */
+
+    if (isUnlocked) {
+
+        card.innerHTML = `
+
+            <div class="coupon-top">
+
+                <div class="coupon-left">
+
+                    <div class="coupon-icon">
+                        ${coupon.icon}
+                    </div>
+
+                    <div>
+
+                        <div class="coupon-title">
+                            ${coupon.name}
+                        </div>
+
+                        <div class="description">
+                            ${coupon.description}
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="cost unlocked">
+                    ✓ UNLOCKED
+                </div>
+
+            </div>
+
+
+            <div class="status unlocked">
+
+                🎉 You have unlocked this reward!
+
+            </div>
+
+
+            <div class="reward-box">
+
+                <div class="code-label">
+                    YOUR COUPON CODE
+                </div>
+
+
+                <div class="code-row">
+
+                    <div class="code-box">
+                        ${coupon.code}
+                    </div>
+
+
+                    <button
+                        class="copy-btn"
+                        onclick="copyCode('${coupon.code}')">
+
+                        COPY
+
+                    </button>
+
+                </div>
+
+
+                <button
+                    class="redeem-btn"
+                    onclick="openReward('${coupon.link}')">
+
+                    🚀 OPEN REWARD WEBSITE
+
+                </button>
+
+            </div>
+
+        `;
+
+    }
+
+
+    /* =================================================
+       LOCKED COUPON
+    ================================================= */
+
+    else {
+
+        card.innerHTML = `
+
+            <div class="coupon-top">
+
+                <div class="coupon-left">
+
+                    <div class="coupon-icon">
+                        🔒
+                    </div>
+
+                    <div>
+
+                        <div class="coupon-title">
+                            ${coupon.name}
+                        </div>
+
+                        <div class="description">
+                            ${coupon.description}
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="cost">
+
+                    🪙
+                    ${coupon.requiredCoins.toLocaleString()}
+
+                </div>
+
+            </div>
+
+
+            <div class="status locked">
+
+                🔒 Need
+                ${remaining.toLocaleString()}
+                more coins
+
+            </div>
+
+
+            <div class="locked-box">
+
+                <div class="lock-icon">
+                    🔐
+                </div>
+
+                <div>
+                    Coupon Code Locked
+                </div>
+
+                <div class="locked-small">
+
+                    Collect
+                    ${remaining.toLocaleString()}
+                    more coins to unlock.
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    container.appendChild(card);
+
+});
+
+
+/* =====================================================
+   UNLOCKED / LOCKED COUNT
+===================================================== */
+
+document.getElementById(
+    "unlockedCount"
+).textContent =
+    unlocked;
+
+
+document.getElementById(
+    "lockedCount"
+).textContent =
+    coupons.length - unlocked;
+
+
+/* =====================================================
+   NEXT COUPON
+===================================================== */
+
+let nextCoupon = null;
+
+
+for (
+    let i = 0;
+    i < coupons.length;
+    i++
+) {
+
+    if (
+        coins <
+        coupons[i].requiredCoins
+    ) {
+
+        nextCoupon =
+            coupons[i];
+
+        break;
+
+    }
+
+}
+
+
+/* =====================================================
+   PROGRESS
+===================================================== */
+
+if (nextCoupon) {
+
+    const index =
+        coupons.indexOf(nextCoupon);
+
+
+    const previous =
+        index > 0
+            ? coupons[index - 1].requiredCoins
+            : 0;
+
+
+    const range =
+        nextCoupon.requiredCoins -
+        previous;
+
+
+    const current =
+        coins -
+        previous;
+
+
+    let percent =
+        (current / range) * 100;
+
+
+    percent =
+        Math.max(
+            0,
+            Math.min(
+                100,
+                percent
+            )
+        );
+
+
+    document.getElementById(
+        "nextReward"
+    ).textContent =
+        "🪙 " +
+        nextCoupon.requiredCoins.toLocaleString();
+
+
+    document.getElementById(
+        "progressCurrent"
+    ).textContent =
+        coins.toLocaleString() +
+        " coins";
+
+
+    document.getElementById(
+        "progressNeeded"
+    ).textContent =
+        nextCoupon.requiredCoins.toLocaleString() +
+        " coins";
+
+
+    setTimeout(function() {
+
+        document.getElementById(
+            "progressFill"
+        ).style.width =
+            percent + "%";
+
+    }, 300);
+
+}
+
+
+/* =====================================================
+   ALL COUPONS UNLOCKED
+===================================================== */
+
+else {
+
+    document.getElementById(
+        "nextReward"
+    ).textContent =
+        "🎉 ALL UNLOCKED";
+
+
+    document.getElementById(
+        "progressCurrent"
+    ).textContent =
+        coins.toLocaleString() +
+        " coins";
+
+
+    document.getElementById(
+        "progressNeeded"
+    ).textContent =
+        "Maximum reward";
+
+
+    setTimeout(function() {
+
+        document.getElementById(
+            "progressFill"
+        ).style.width =
+            "100%";
+
+    }, 300);
+
+}
+
+
+/* =====================================================
+   COPY COUPON
+===================================================== */
+
+function copyCode(code) {
+
+    if (
+        navigator.clipboard &&
+        navigator.clipboard.writeText
+    ) {
+
+        navigator.clipboard
+            .writeText(code)
+            .then(function() {
+
+                showToast(
+                    "✓ Coupon code copied!"
+                );
+
+            });
+
+    }
+
+}
+
+
+/* =====================================================
+   OPEN WEBSITE
+===================================================== */
+
+function openReward(link) {
+
+    window.location.href =
+        link;
+
+}
+
+
+/* =====================================================
+   TOAST
+===================================================== */
+
+function showToast(message) {
+
+    const toast =
+        document.getElementById(
+            "toast"
+        );
+
+
+    toast.textContent =
+        message;
+
+
+    toast.classList.add(
+        "show"
+    );
+
+
+    setTimeout(function() {
+
+        toast.classList.remove(
+            "show"
+        );
+
+    }, 2200);
+
+}
+
+
+/* =====================================================
+   DARK MODE
+===================================================== */
+
+function toggleDarkMode() {
+
+    document.body.classList.toggle(
+        "dark"
+    );
+
+}
+
+
+/* =====================================================
+   CONFETTI
+===================================================== */
+
+function createConfetti() {
+
+    for (
+        let i = 0;
+        i < 35;
+        i++
+    ) {
+
+        const piece =
+            document.createElement(
+                "div"
+            );
+
+
+        piece.className =
+            "confetti";
+
+
+        piece.style.left =
+            Math.random() * 100 + "vw";
+
+
+        piece.style.animationDelay =
+            Math.random() * .7 + "s";
+
+
+        piece.style.transform =
+            "rotate(" +
+            Math.random() * 360 +
+            "deg)";
+
+
+        document.body.appendChild(
+            piece
+        );
+
+
+        setTimeout(function() {
+
+            piece.remove();
+
+        }, 3500);
+
+    }
+
+}
+
+
+/* =====================================================
+   SHOW CELEBRATION IF REWARD IS UNLOCKED
+===================================================== */
+
+if (unlocked > 0) {
+
+    setTimeout(function() {
+
+        createConfetti();
+
+    }, 600);
+
+}
+
+</script>
+
+
+</body>
+</html>

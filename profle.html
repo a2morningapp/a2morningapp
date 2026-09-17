@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>User Profile</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f3f6fb;
+    color: #172033;
+    min-height: 100vh;
+}
+
+/* ---------- TOP HEADER ---------- */
+
+.header {
+    height: 190px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed, #9333ea);
+    position: relative;
+    border-radius: 0 0 35px 35px;
+    overflow: hidden;
+}
+
+.header::before {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
+    top: -100px;
+    right: -50px;
+}
+
+.header::after {
+    content: "";
+    position: absolute;
+    width: 160px;
+    height: 160px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+    bottom: -100px;
+    left: -40px;
+}
+
+/* ---------- PROFILE CARD ---------- */
+
+.profile-container {
+    max-width: 500px;
+    margin: -75px auto 30px;
+    padding: 0 18px;
+    position: relative;
+    z-index: 2;
+}
+
+.profile-card {
+    background: white;
+    border-radius: 25px;
+    padding: 25px 20px 30px;
+    box-shadow: 0 15px 40px rgba(31, 41, 55, 0.12);
+    text-align: center;
+}
+
+/* ---------- AVATAR ---------- */
+
+.avatar {
+    width: 105px;
+    height: 105px;
+    margin: -75px auto 15px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border: 6px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 42px;
+    font-weight: 700;
+    box-shadow: 0 8px 25px rgba(79,70,229,0.30);
+}
+
+.name {
+    font-size: 25px;
+    font-weight: 750;
+    color: #111827;
+    margin-top: 5px;
+}
+
+.mobile {
+    margin-top: 6px;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+/* ---------- VERIFIED ---------- */
+
+.verified {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 12px;
+    background: #ecfdf5;
+    color: #059669;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ---------- STATISTICS ---------- */
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 25px;
+}
+
+.stat {
+    background: #f8fafc;
+    border-radius: 17px;
+    padding: 15px 7px;
+    border: 1px solid #edf0f5;
+}
+
+.stat-icon {
+    font-size: 22px;
+    margin-bottom: 7px;
+}
+
+.stat-number {
+    font-size: 20px;
+    font-weight: 750;
+    color: #111827;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 3px;
+}
+
+/* ---------- INFORMATION ---------- */
+
+.section {
+    margin-top: 25px;
+    text-align: left;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #111827;
+}
+
+.info-box {
+    background: #f8fafc;
+    border: 1px solid #edf0f5;
+    border-radius: 17px;
+    overflow: hidden;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-left {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.info-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef2ff;
+    font-size: 18px;
+}
+
+.info-title {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 650;
+    color: #1f2937;
+    text-align: right;
+    word-break: break-word;
+}
+
+/* ---------- PERFORMANCE ---------- */
+
+.performance {
+    margin-top: 25px;
+    text-align: left;
+}
+
+.progress-box {
+    background: #f8fafc;
+    padding: 17px;
+    border-radius: 17px;
+    border: 1px solid #edf0f5;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.progress-title {
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.progress-percent {
+    font-size: 13px;
+    font-weight: 700;
+    color: #4f46e5;
+}
+
+.progress-bar {
+    height: 9px;
+    background: #e5e7eb;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 20px;
+    background: linear-gradient(90deg, #4f46e5, #8b5cf6);
+    transition: width 1s ease;
+}
+
+/* ---------- FOOTER ---------- */
+
+.footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 11px;
+    padding: 5px 0 25px;
+}
+
+/* ---------- DESKTOP ---------- */
+
+@media (min-width: 600px) {
+
+    .header {
+        height: 220px;
+    }
+
+    .profile-container {
+        max-width: 550px;
+    }
+
+    .profile-card {
+        padding: 30px;
+    }
+}
+
+/* ---------- SMALL MOBILE ---------- */
+
+@media (max-width: 350px) {
+
+    .stats {
+        gap: 6px;
+    }
+
+    .stat {
+        padding: 12px 4px;
+    }
+
+    .stat-number {
+        font-size: 17px;
+    }
+
+    .stat-label {
+        font-size: 10px;
+    }
+}
+</style>
+</head>
+
+
+<body>
+
+<!-- HEADER -->
+<div class="header"></div>
+
+
+<div class="profile-container">
+
+    <div class="profile-card">
+
+        <!-- PROFILE AVATAR -->
+        <div class="avatar" id="avatar">U</div>
+
+        <!-- USER NAME -->
+        <div class="name" id="userName">User</div>
+
+        <!-- MOBILE -->
+        <div class="mobile" id="userMobile">Mobile number</div>
+
+        <!-- VERIFIED -->
+        <div class="verified">
+            ✓ Verified Profile
+        </div>
+
+
+        <!-- STATISTICS -->
+
+        <div class="stats">
+
+            <div class="stat">
+                <div class="stat-icon">✓</div>
+                <div class="stat-number" id="correctAnswers">0</div>
+                <div class="stat-label">Correct Answers</div>
+            </div>
+
+            <div class="stat">
+                <div class="stat-icon">🎮</div>
+                <div class="stat-number" id="totalMatches">0</div>
+                <div class="stat-label">Total Matches</div>
+            </div>
+
+            <div class="stat">
+                <div class="stat-icon">🪙</div>
+                <div class="stat-number" id="totalCoins">0</div>
+                <div class="stat-label">Total Coins</div>
+            </div>
+
+        </div>
+
+
+        <!-- ACCOUNT INFORMATION -->
+
+        <div class="section">
+
+            <div class="section-title">
+                Account Information
+            </div>
+
+            <div class="info-box">
+
+                <div class="info-row">
+
+                    <div class="info-left">
+
+                        <div class="info-icon">👤</div>
+
+                        <div>
+                            <div class="info-title">Full Name</div>
+                        </div>
+
+                    </div>
+
+                    <div class="info-value" id="infoName">
+                        -
+                    </div>
+
+                </div>
+
+
+                <div class="info-row">
+
+                    <div class="info-left">
+
+                        <div class="info-icon">📱</div>
+
+                        <div>
+                            <div class="info-title">Mobile Number</div>
+                        </div>
+
+                    </div>
+
+                    <div class="info-value" id="infoMobile">
+                        -
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- PERFORMANCE -->
+
+        <div class="performance">
+
+            <div class="section-title">
+                Performance
+            </div>
+
+            <div class="progress-box">
+
+                <div class="progress-header">
+
+                    <div class="progress-title">
+                        Answer Accuracy
+                    </div>
+
+                    <div class="progress-percent" id="accuracy">
+                        0%
+                    </div>
+
+                </div>
+
+                <div class="progress-bar">
+
+                    <div class="progress-fill" id="progress"></div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="footer">
+        © 2026 • User Profile
+    </div>
+
+</div>
+
+
+<script>
+
+/*
+====================================================
+READ PARAMETERS FROM KODULAR WEBVIEW URL
+====================================================
+
+Example URL:
+
+profile.html?name=Rahul&mobile=9876543210&score=50&matchs=75&coins=1200
+
+====================================================
+*/
+
+
+const params = new URLSearchParams(window.location.search);
+
+
+// -------- GET NAME --------
+
+const name =
+    params.get("name") ||
+    params.get("Name") ||
+    "User";
+
+
+// -------- GET MOBILE --------
+
+const mobile =
+    params.get("mobile") ||
+    params.get("Mobile") ||
+    "Not available";
+
+
+// -------- GET CORRECT ANSWERS --------
+
+const correct =
+    parseInt(
+        params.get("score") ||
+        params.get("correct") ||
+        params.get("CorrectAns") ||
+        "0"
+    ) || 0;
+
+
+// -------- GET TOTAL MATCHES --------
+
+const matches =
+    parseInt(
+        params.get("matchs") ||
+        params.get("matches") ||
+        params.get("totalmatches") ||
+        "0"
+    ) || 0;
+
+
+// -------- GET COINS --------
+
+const coins =
+    parseInt(
+        params.get("coins") ||
+        params.get("COINS") ||
+        params.get("coin") ||
+        "0"
+    ) || 0;
+
+
+// -------- DISPLAY NAME --------
+
+document.getElementById("userName").textContent = name;
+
+document.getElementById("infoName").textContent = name;
+
+
+// -------- DISPLAY MOBILE --------
+
+document.getElementById("userMobile").textContent = mobile;
+
+document.getElementById("infoMobile").textContent = mobile;
+
+
+// -------- DISPLAY STATISTICS --------
+
+document.getElementById("correctAnswers").textContent =
+    correct.toLocaleString();
+
+document.getElementById("totalMatches").textContent =
+    matches.toLocaleString();
+
+document.getElementById("totalCoins").textContent =
+    coins.toLocaleString();
+
+
+// -------- CREATE AVATAR LETTER --------
+
+const firstLetter =
+    name.trim().charAt(0).toUpperCase() || "U";
+
+document.getElementById("avatar").textContent =
+    firstLetter;
+
+
+// -------- CALCULATE ACCURACY --------
+
+let accuracy = 0;
+
+if (matches > 0) {
+    accuracy = (correct / matches) * 100;
+}
+
+accuracy = Math.min(100, Math.max(0, accuracy));
+
+
+// Round to 1 decimal if required
+
+const accuracyText =
+    accuracy % 1 === 0
+        ? accuracy.toFixed(0)
+        : accuracy.toFixed(1);
+
+
+// -------- DISPLAY ACCURACY --------
+
+document.getElementById("accuracy").textContent =
+    accuracyText + "%";
+
+
+// -------- ANIMATE PROGRESS BAR --------
+
+setTimeout(function() {
+
+    document.getElementById("progress").style.width =
+        accuracy + "%";
+
+}, 300);
+
+</script>
+
+</body>
+</html>

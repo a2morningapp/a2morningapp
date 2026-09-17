@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>WhatsApp Contact</title>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    min-height:100vh;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    padding:20px;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Arial,
+        sans-serif;
+
+    background:
+        linear-gradient(
+            135deg,
+            #eef2ff,
+            #f8fafc,
+            #ecfdf5
+        );
+}
+
+.container{
+    width:100%;
+    max-width:420px;
+}
+
+.card{
+    background:#ffffff;
+
+    border:1px solid #e5e7eb;
+
+    border-radius:26px;
+
+    padding:30px 24px;
+
+    text-align:center;
+
+    box-shadow:
+        0 20px 55px
+        rgba(15,23,42,.12);
+}
+
+
+/* ICON */
+
+.icon{
+    width:76px;
+    height:76px;
+
+    margin:0 auto 18px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:23px;
+
+    background:#dcfce7;
+
+    font-size:38px;
+}
+
+
+/* TITLE */
+
+.title{
+    font-size:25px;
+
+    font-weight:850;
+
+    color:#111827;
+}
+
+
+.subtitle{
+    margin-top:7px;
+
+    font-size:12px;
+
+    line-height:1.6;
+
+    color:#6b7280;
+}
+
+
+/* NUMBER */
+
+.number-box{
+
+    margin-top:22px;
+
+    padding:14px;
+
+    border-radius:15px;
+
+    background:#f8fafc;
+
+    border:1px solid #e5e7eb;
+
+}
+
+
+.number-label{
+
+    font-size:8px;
+
+    color:#9ca3af;
+
+    font-weight:800;
+
+    text-transform:uppercase;
+
+    letter-spacing:.7px;
+
+}
+
+
+.number{
+
+    margin-top:4px;
+
+    font-size:16px;
+
+    color:#374151;
+
+    font-weight:750;
+
+}
+
+
+/* BUTTON */
+
+.whatsapp-btn{
+
+    width:100%;
+
+    margin-top:18px;
+
+    padding:15px 18px;
+
+    border:0;
+
+    border-radius:15px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:10px;
+
+    background:#25D366;
+
+    color:#ffffff;
+
+    font-size:14px;
+
+    font-weight:800;
+
+    cursor:pointer;
+
+    box-shadow:
+        0 8px 20px
+        rgba(37,211,102,.25);
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease;
+}
+
+
+.whatsapp-btn:hover{
+
+    box-shadow:
+        0 11px 26px
+        rgba(37,211,102,.35);
+
+}
+
+
+.whatsapp-btn:active{
+
+    transform:scale(.97);
+
+}
+
+
+.whatsapp-icon{
+
+    font-size:20px;
+
+}
+
+
+/* FOOTER */
+
+.footer{
+
+    margin-top:20px;
+
+    font-size:9px;
+
+    color:#9ca3af;
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <div class="card">
+
+
+        <div class="icon">
+            💬
+        </div>
+
+
+        <div class="title">
+            Contact Us
+        </div>
+
+
+        <div class="subtitle">
+            Have any questions or need help?
+            Contact us directly.
+        </div>
+
+
+        <div class="number-box">
+
+
+            <div class="number-label">
+                WhatsApp Number
+            </div>
+
+
+            <div class="number">
+                +91 97841 04853
+            </div>
+
+
+        </div>
+
+
+        <button
+            type="button"
+            class="whatsapp-btn"
+            id="whatsappButton">
+
+            <span class="whatsapp-icon">
+                💬
+            </span>
+
+            <span>
+                WhatsApp
+            </span>
+
+        </button>
+
+
+        <div class="footer">
+            © 2026 Bombay Web App
+        </div>
+
+
+    </div>
+
+
+</div>
+
+
+<script>
+
+/* ============================================
+   WHATSAPP NUMBER
+============================================ */
+
+const whatsappNumber =
+    "919784104853";
+
+
+/* ============================================
+   WHATSAPP LINK
+============================================ */
+
+const whatsappLink =
+    "https://wa.me/" +
+    whatsappNumber;
+
+
+/* ============================================
+   BUTTON CLICK
+============================================ */
+
+document
+    .getElementById("whatsappButton")
+    .addEventListener(
+        "click",
+        function(event){
+
+            /*
+             * Prevent any default action.
+             */
+
+            event.preventDefault();
+
+
+            /*
+             * ONLY OUTPUT
+             * 
+             * The console will contain
+             * ONLY the WhatsApp URL.
+             */
+
+            console.log(
+                whatsappLink
+            );
+
+        }
+    );
+
+</script>
+
+
+</body>
+
+</html>
