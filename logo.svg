@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Kalyan Gold">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5df9a"/>
+      <stop offset="1" stop-color="#c49a43"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#174c68"/>
+      <stop offset="1" stop-color="#08273b"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="61" fill="url(#navy)"/>
+  <circle cx="64" cy="64" r="55" fill="none" stroke="url(#gold)" stroke-width="2"/>
+  <path d="M64 15 71 29l15-2-2 15 13 8-13 8 2 15-15-2-7 14-8-14-15 2 2-15-13-8 13-8-2-15 15 2z" fill="none" stroke="url(#gold)" stroke-linejoin="round" stroke-width="1.7"/>
+  <text x="64" y="78" text-anchor="middle" font-family="Georgia,serif" font-size="35" font-weight="700" letter-spacing="-4" fill="#fff">K<tspan fill="url(#gold)">G</tspan></text>
+  <path d="M45 94h38" fill="none" stroke="url(#gold)" stroke-linecap="round" stroke-width="2"/>
+  <circle cx="64" cy="101" r="2" fill="url(#gold)"/>
+</svg>
