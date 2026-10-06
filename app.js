@@ -1009,7 +1009,7 @@ function renderWebViewer() {
 
 function gameTile(game) {
   return `<button class="game-tile ${state.selectedGame === game ? "selected" : ""}" type="button" data-select-game="${safeText(game)}">
-    <img src="assets/${safeText(GAME_ART[game])}" alt="" loading="lazy">
+    <img src="${safeText(GAME_ART[game])}" alt="" loading="lazy">
     <span>${safeText(legacyGameType(game))}</span>
   </button>`;
 }
@@ -1032,7 +1032,7 @@ function marketCards(markets, showAll = false) {
     const isOpen = marketSessions(market).length > 0;
     const shownResult = market.result || market.raw?.[6] || "### - ## - ###";
     return `<article class="market-card aia-market-card">
-        <button class="market-result-button" type="button" data-market-result="${safeText(market.id)}" aria-label="View ${safeText(market.name)} result"><img class="market-card-art" src="assets/icon-chart.png" alt="" aria-hidden="true"></button>
+        <button class="market-result-button" type="button" data-market-result="${safeText(market.id)}" aria-label="View ${safeText(market.name)} result"><img class="market-card-art" src="icon-chart.png" alt="" aria-hidden="true"></button>
       <div class="market-card-info"><h3>${safeText(market.name)}</h3>
         <p><strong>Open:</strong> ${safeText(market.openTime || "—")}</p>
         <p><strong>Close:</strong> ${safeText(market.closeTime || "—")}</p>
@@ -1134,7 +1134,7 @@ function renderGameSelect() {
   return `<section class="aia-bet-heading"><strong>${safeText(market.name)} <span>›</span> ${safeText(state.selectedSession)}</strong></section>
     <div class="aia-market-controls">
       <div class="aia-session-toggle">${["Open", "Close"].map(session => `<button type="button" class="${state.selectedSession === session ? "active" : ""}" data-session="${session}" ${!sessions.includes(session) ? "disabled" : ""}><span>${state.selectedSession === session ? "◉" : "◯"}</span>${session}</button>`).join("")}</div>
-      <button class="aia-chart-button" type="button" data-page="charts"><img src="assets/icon-chart.png" alt=""><span>Result Chart</span></button>
+      <button class="aia-chart-button" type="button" data-page="charts"><img src="icon-chart.png" alt=""><span>Result Chart</span></button>
     </div>
     <div class="section-head"><h2>Choose game type</h2></div>
     <div class="aia-game-grid">${GAME_TYPES.map(gameTile).join("")}</div>
