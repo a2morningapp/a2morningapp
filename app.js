@@ -490,6 +490,22 @@ function restoreSession() {
   return false;
 }
 
+function getSharedSessionFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const name = String(params.get("name") || params.get("fullname") || params.get("user") || "").trim();
+  const rawPhone = params.get("phone") || params.get("mobile") || params.get("number") || "";
+  const coinValue = params.get("coin") || params.get("coins") || params.get("balance") || "";
+  const phone = String(rawPhone).replace(/\D/g, "");
+  if (!name || !/^\d{10}$/.test(phone) || !coinValue.trim()) {
+    return null;
+  }
+  return {
+    phone,
+    name,
+    coin: String(coinValue).trim()
+  };
+}
+
 function logout() {
   stopRealtimeSubscriptions();
   state.user = null;
@@ -1829,8 +1845,19 @@ $("#sidebar").addEventListener("click", event => {
 });
 $("#current-year").textContent = new Date().getFullYear();
 
-if (restoreSession()) {
-  enterApp();
+const sharedUserSession = getSharedSessionFromUrl();
+if (sharedUserSession) {
+  state.user = {
+    phone: sharedUserSession.phone,
+    name: sharedUserSession.name
+  };
+  localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+  void enterApp();
+  void loadAdminSettings().catch(error => {
+    notify(error.message || "Unable to load support settings from Firebase.", "error");
+  });
+} else if (restoreSession()) {
+  void enterApp();
 } else {
   showAuth("signup");
   void loadAdminSettings().catch(error => {
