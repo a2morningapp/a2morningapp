@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101827">
+    <title>Kalyan Gold Admin</title>
+    <link rel="stylesheet" href="admin.css">
+  </head>
+  <body>
+    <main class="admin-login" id="admin-login">
+      <section class="login-card" aria-labelledby="login-title">
+        <div class="login-brand">
+          <img src="admin-logo1.png" alt="" class="login-logo">
+          <span><strong>Kalyan Gold</strong><small>ADMIN CONSOLE</small></span>
+        </div>
+        <div class="login-heading">
+          <span class="login-icon" aria-hidden="true">◆</span>
+          <p class="login-eyebrow">ADMIN ACCESS</p>
+          <h1 id="login-title">Admin sign in</h1>
+          <p>Sign in to manage your dashboard.</p>
+        </div>
+        <form id="admin-login-form" class="login-form">
+          <label for="admin-phone">Admin phone number</label>
+          <div class="login-input-wrap"><span aria-hidden="true">+91</span><input id="admin-phone" name="phone" type="tel" inputmode="numeric" autocomplete="username" maxlength="10" pattern="[0-9]{10}" placeholder="10-digit phone number" required></div>
+          <label for="admin-password">Password</label>
+          <input id="admin-password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+          <p class="login-error" id="admin-login-error" role="alert" aria-live="polite"></p>
+          <button class="login-submit" id="admin-login-submit" type="submit"><span>Sign in</span><span aria-hidden="true">→</span></button>
+        </form>
+        <div class="login-footer"><span></span>Authorized administrators only</div>
+      </section>
+    </main>
+    <div class="app-shell" id="admin-app" hidden>
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="#" data-page="dashboard">
+          <img src="admin-logo1.png" alt="" class="brand-logo">
+          <span><strong>Kalyan Gold</strong><small>ADMIN CONSOLE</small></span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <nav id="navigation" aria-label="Main navigation"></nav>
+        <div class="sidebar-bottom">
+          <div class="local-indicator" id="connection-indicator"><span></span><div><strong id="connection-title">Connecting…</strong><small id="connection-detail">Live updates</small></div></div>
+          <button class="nav-link" data-action="export"><span class="nav-icon">⇧</span> Export data</button>
+          <button class="nav-link logout-link" data-action="admin-logout"><span class="nav-icon">↪</span> Sign out</button>
+        </div>
+      </aside>
+      <button class="sidebar-backdrop" data-action="close-menu" aria-label="Close navigation" tabindex="-1"></button>
+      <main class="main-content">
+        <header class="topbar">
+          <button class="icon-button mobile-menu" data-action="toggle-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">☰</button>
+          <div class="breadcrumbs"><span>Admin</span><b>/</b><strong id="page-crumb">Dashboard</strong></div>
+          <div class="top-actions">
+            <span class="date-chip" id="today-date"></span>
+            <button class="avatar-button" data-action="profile" aria-label="Admin profile">A</button>
+          </div>
+        </header>
+        <section class="page-wrap" id="page-content" aria-live="polite"></section>
+      </main>
+    </div>
+    <div id="modal-root"></div>
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>

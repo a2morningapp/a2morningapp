@@ -76,7 +76,11 @@ const state = {
   marketDay: "",
   marketBucket: "",
   marketTimestamp: null,
-  marketTimestampReceivedAt: 0
+  marketTimestampReceivedAt: 0,
+  maintenance: false,
+  newRegistrations: true,
+  openBets: true,
+  closeBets: true
 };
 const realtimeSources = new Map();
 const realtimeTimers = new Map();
@@ -199,22 +203,22 @@ async function dbRequest(method, path, body) {
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error("Firebase returned an unreadable response.");
+        throw new Error("The server returned an unreadable response.");
       }
     }
     if (!response.ok) {
       const reason = data && (data.error || data.message);
       const message = reason ? String(reason) : `HTTP ${response.status}`;
-      throw new Error(`Firebase ${method} ${path || "/"} failed (${response.status}): ${message}`);
+      throw new Error(`Request failed (${response.status}): ${message}`);
     }
     return data;
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error(`Firebase ${method} ${path || "/"} timed out after 12 seconds. Check your connection and try again.`);
+      throw new Error(`Request timed out after 12 seconds. Check your connection and try again.`);
     }
-    if (error instanceof Error && error.message.startsWith("Firebase ")) throw error;
+    if (error instanceof Error && /^(The server|Request )/.test(error.message)) throw error;
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Firebase ${method} ${path || "/"} failed to connect: ${reason}`);
+    throw new Error(`Could not connect: ${reason}`);
   } finally {
     window.clearTimeout(timeout);
   }
@@ -238,7 +242,7 @@ async function dbPutAndVerify(path, value) {
   await dbPut(path, value);
   const saved = await dbGet(path);
   if (JSON.stringify(comparableFirebaseValue(saved)) !== JSON.stringify(comparableFirebaseValue(value))) {
-    throw new Error(`Firebase did not save the expected value at ${path}. Check the database path and write permission.`);
+    throw new Error(`Could not save the expected value at ${path}. Check the data path and write permission.`);
   }
 }
 
@@ -248,7 +252,7 @@ async function dbPatchAndVerify(updates) {
   } catch (error) {
     if (/permission denied|unauthorized|forbidden/i.test(error.message)) {
       const paths = Object.keys(updates).map(path => path.replace(/\/\d{10}(?=\/|$)/g, "/<phone>"));
-      throw new Error(`Firebase denied this multi-path write. It requires write permission for: ${paths.join(", ")}. Check the published Realtime Database rules for this project. The website cannot override Firebase rules.`);
+      throw new Error(`The update was denied. Write permission is required for: ${paths.join(", ")}. Check the access rules.`);
     }
     throw error;
   }
@@ -259,7 +263,7 @@ async function dbPatchAndVerify(updates) {
   }));
   const failed = verification.filter(item => !item.matches);
   if (failed.length) {
-    throw new Error(`Firebase did not confirm saving: ${failed.map(item => item.path).join(", ")}. Check database paths and write permissions.`);
+    throw new Error(`Could not confirm saving: ${failed.map(item => item.path).join(", ")}. Check data paths and write permissions.`);
   }
 }
 
@@ -404,6 +408,13 @@ function openExternalUrl(value, label) {
 function applyAdminSettings(value) {
   const settings = decodeFirebaseObject(value) || {};
   state.signUpBonus = Number(decodeFirebaseValue(settings["Sign Up Bonus"]) || 0);
+  state.maintenance = /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.Maintanance) || ""));
+  state.newRegistrations = settings.EnableNewRegistrations === undefined
+    ? true : /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.EnableNewRegistrations)));
+  state.openBets = settings.EnableOpenBets === undefined
+    ? true : /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.EnableOpenBets)));
+  state.closeBets = settings.EnableCloseBets === undefined
+    ? true : /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.EnableCloseBets)));
   const policy = decodeFirebaseValue(settings.Policy);
   state.policy = Array.isArray(policy) ? policy.join("\n\n") : String(policy || "");
   state.websiteUrl = String(decodeFirebaseValue(settings.Website) || "").trim() || DEFAULT_WEBSITE_URL;
@@ -432,7 +443,7 @@ async function configuredSignUpBonus() {
 
 async function ensureUserBalance(profilePath) {
   if (!window.firebase?.database) {
-    throw new Error("Firebase is unavailable; the account balance could not be initialized.");
+    throw new Error("The account balance could not be initialized because the service is unavailable.");
   }
   const balanceRef = firebase.database().ref(`${profilePath}/bal`);
   const existingBalance = await balanceRef.once("value");
@@ -461,9 +472,13 @@ async function submitAuth(event) {
     notify("Enter your name to create an account.", "error");
     return;
   }
-
   setBusy(button, true, state.authMode === "signup" ? "Creating account…" : "Signing in…");
   try {
+    if (state.authMode === "signup") {
+      await loadAdminSettings();
+      if (state.maintenance) throw new Error("New accounts and bidding are unavailable during maintenance.");
+      if (!state.newRegistrations) throw new Error("New player registrations are currently closed.");
+    }
     const recordPath = `${DATABASE_ROOTS.users}/${phone}`;
     const record = decodeFirebaseObject(await dbGet(recordPath));
     if (state.authMode === "signup") {
@@ -558,6 +573,7 @@ async function enterApp() {
   $("#current-year").textContent = new Date().getFullYear();
   $("#header-name").textContent = state.user.name;
   $("#header-avatar").textContent = state.user.name.trim().charAt(0).toUpperCase() || "K";
+  void recordLastSeen().catch(error => notify(error.message || "Could not update your last seen time.", "error"));
   await renderPage();
   startRealtimeSubscriptions();
   const phone = state.user.phone;
@@ -565,12 +581,17 @@ async function enterApp() {
     if (!state.user || state.user.phone !== phone) return;
     for (const outcome of outcomes) {
       if (outcome.status === "rejected") {
-        notify(outcome.reason?.message || "Could not load app data from Firebase.", "error");
+        notify(outcome.reason?.message || "Could not load app data.", "error");
       }
     }
     syncMarketBucketSubscription();
     await renderPage();
   });
+}
+
+async function recordLastSeen() {
+  if (!state.user) return;
+  await dbPut(`Last Seen/${phonePath(state.user.phone)}`, new Date().toISOString());
 }
 
 async function refreshUserData() {
@@ -661,7 +682,7 @@ function requestRecordsForPhone(data, phone, kind) {
 
 async function loadGlobalData() {
   const dateRequest = dbGet("Date").then(decodeFirebaseObject).catch(error => {
-    notify(`Unable to load Firebase market date: ${error.message || "Firebase request failed."}`, "error");
+    notify(`Unable to load market date: ${error.message || "Request failed."}`, "error");
     return null;
   });
   const optionalRequests = Promise.allSettled([
@@ -695,7 +716,7 @@ async function loadGlobalData() {
   state.marketLoadError = "";
   const optionalData = (result, label, fallback) => {
     if (result.status === "fulfilled") return result.value;
-    notify(`Unable to load ${label}: ${result.reason?.message || "Firebase request failed."}`, "error");
+    notify(`Unable to load ${label}: ${result.reason?.message || "Request failed."}`, "error");
     return fallback;
   };
   const notice = optionalData(noticeResult, "notices", null);
@@ -774,7 +795,7 @@ function watchFirebasePath(path, refreshGroup) {
     }, 0);
   };
   const handleError = error => {
-    notify(`Firebase real-time updates failed for ${path}: ${error.message || "Permission denied or connection unavailable."}`, "error");
+    notify(`Live updates failed: ${error.message || "Permission denied or connection unavailable."}`, "error");
   };
   databaseRef.on("value", handleChange, handleError);
   realtimeSources.set(path, {
@@ -851,7 +872,7 @@ function scheduleRealtimeRefresh(group) {
       if (group === "global") syncMarketBucketSubscription();
       await renderPage();
     } catch (error) {
-      notify(error.message || `Could not refresh ${group} data from Firebase.`, "error");
+      notify(error.message || `Could not refresh ${group} data.`, "error");
     }
   }, 150));
 }
@@ -973,7 +994,7 @@ function setPage(page) {
   renderPage();
   if (page === "points" || page === "deposit" || page === "withdraw") {
     void loadWalletRequests(page).then(renderPage).catch(error => {
-      notify(error.message || "Could not load wallet history from Firebase.", "error");
+      notify(error.message || "Could not load wallet history.", "error");
     });
   }
 }
@@ -1049,7 +1070,7 @@ function marketCards(markets, showAll = false) {
   if (!markets.length) {
     const detail = state.marketLoadError
       ? safeText(state.marketLoadError)
-      : "Market data will appear here when it is available in the Firebase market bucket.";
+      : "Market data will appear here when it is available.";
     return `<div class="empty-state"><strong>No markets available</strong>${detail}</div>`;
   }
   const visibleMarkets = showAll ? markets : markets.slice(0, 6);
@@ -1071,6 +1092,7 @@ function marketCards(markets, showAll = false) {
 function marketSessions(market) {
   if (!market || /closed/i.test(market.status) || marketClockStatus(market) === "closed") return [];
   const available = ["Open", "Close"].filter((session, index) => {
+    if (state.maintenance || !(session === "Open" ? state.openBets : state.closeBets)) return false;
     const enabled = market.raw?.[index + 3];
     return enabled === undefined || String(enabled).toUpperCase() === "Y";
   });
@@ -1116,6 +1138,7 @@ function renderHome() {
   const categories = availableMarketCategories().map(category => `<button type="button" class="filter-chip ${state.category === category ? "active" : ""}" data-category="${safeText(category)}">${safeText(category)}</button>`).join("");
   const markets = marketsForCategory(state.category);
   return `<section class="aia-home-intro"><div><small>WELCOME BACK</small><h1>${safeText(firstName)}</h1></div><div class="aia-home-actions"><button type="button" data-page="deposit">＋ Add points</button><button type="button" data-page="withdraw">Withdraw</button></div></section>
+    ${state.maintenance ? `<div class="notice-strip"><strong>MAINTENANCE</strong><span>Game play is temporarily unavailable. Please check back later.</span></div>` : ""}
     ${notice ? `<div class="notice-strip"><strong>NOTICE</strong><span>${safeText(notice.message)}</span></div>` : ""}
     <div class="aia-support-actions">
       <button class="aia-support-whatsapp" type="button" data-action="open-whatsapp"><span aria-hidden="true">◉</span> WhatsApp support</button>
@@ -1206,7 +1229,7 @@ function renderCharts() {
     ${marketCards(state.markets.filter(market => state.category === "Main"
       ? !/starline|gali|disawar/i.test(market.category)
       : state.category === "Starline" ? /starline/i.test(market.category) : /gali|disawar/i.test(market.category)))}
-    <div class="warning-box">Market results are read directly from the active Firebase games bucket.</div>`;
+    <div class="warning-box">Market results are updated automatically.</div>`;
 }
 
 function pendingRequests() {
@@ -1303,7 +1326,7 @@ function renderWithdraw() {
         <label class="field">Google Pay number<input name="googlePay" type="tel" maxlength="20" value="${safeText(saved.googlePay || "")}" placeholder="Optional"></label>
         <label class="field">Amount (₹)<input name="amount" type="number" min="1" step="1" max="${Math.max(0, state.balance)}" value="${safeText(saved.amount || "")}" required placeholder="Enter amount"></label>
         <button class="button button-primary" type="submit">Send withdrawal request <span>→</span></button>
-      </form><div class="warning-box">Your withdrawal details are remembered in this browser tab so you can reuse them during this session. They are submitted to Firebase only when you send a request.</div>
+      </form><div class="warning-box">Your withdrawal details stay in this browser tab and are sent only when you submit a request.</div>
     </section><section class="panel"><div class="panel-heading"><h2>Recent withdrawal requests</h2></div>${historyTable(state.withdrawalHistory, "withdrawals")}</section></div>`;
 }
 
@@ -1405,7 +1428,7 @@ function renderProfile() {
         <label class="field">New password<input name="newPassword" type="password" minlength="8" required autocomplete="new-password"></label>
         <label class="field">Confirm new password<input name="confirmPassword" type="password" minlength="8" required autocomplete="new-password"></label>
         <button class="button button-secondary" type="submit">Update password</button><p class="inline-message" id="password-message"></p>
-      </form><div class="warning-box">This is the app's custom password flow. It does not use Firebase Authentication.</div></section></div>`;
+      </form></section></div>`;
 }
 
 function dbKey(value) {
@@ -1414,8 +1437,16 @@ function dbKey(value) {
 
 async function submitBid(event) {
   event.preventDefault();
+  if (state.maintenance) {
+    notify("Bidding is unavailable during maintenance.", "error");
+    return;
+  }
   const market = state.markets.find(item => item.name === state.selectedMarket);
   const session = state.selectedSession;
+  if (!(session === "Open" ? state.openBets : state.closeBets)) {
+    notify(`The ${session.toLowerCase()} session is currently unavailable.`, "error");
+    return;
+  }
   const total = state.betDraft.reduce((sum, item) => sum + item.amount, 0);
   if (!market || !state.betDraft.length || total <= 0 || total > state.balance) {
     notify(total > state.balance ? "There are not enough points in your balance." : "Add at least one valid number before submitting.", "error");
@@ -1879,13 +1910,13 @@ if (sharedUserSession) {
   localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
   void enterApp();
   void loadAdminSettings().catch(error => {
-    notify(error.message || "Unable to load support settings from Firebase.", "error");
+    notify(error.message || "Unable to load support settings.", "error");
   });
 } else if (restoreSession()) {
   void enterApp();
 } else {
   showAuth("signup");
   void loadAdminSettings().catch(error => {
-    notify(error.message || "Unable to load support settings from Firebase.", "error");
+    notify(error.message || "Unable to load support settings.", "error");
   });
 }
