@@ -1,3 +1,5 @@
+const EXPECTED_ONESIGNAL_APP_ID = "e1183bae-f7b7-4122-90a7-10d72adf87e2";
+
 function doGet(event) {
   const parameters = typeof event === "undefined" ? {} : event.parameter || {};
   const nonce = String(parameters.status || "");
@@ -42,6 +44,9 @@ function doPost(event) {
     const restApiKey = properties.getProperty("ONESIGNAL_REST_API_KEY") || "";
     if (!appId || !restApiKey) {
       throw new Error("OneSignal server properties are not configured.");
+    }
+    if (appId !== EXPECTED_ONESIGNAL_APP_ID) {
+      throw new Error("ONESIGNAL_APP_ID does not match the app configured in the A2 Morning native app. Update the Script Property and deploy this version.");
     }
 
     const heading = String(parameters.heading || "").trim();
@@ -102,14 +107,14 @@ function doPost(event) {
             ? JSON.stringify(resultBody.errors)
             : "OneSignal rejected the request (HTTP " + status + ").";
       if (/all included players are not subscribed/i.test(details)) {
-        throw new Error("No users are subscribed to push notifications yet. Each user must allow notifications in their browser and enable push notifications on the player website.");
+        throw new Error("OneSignal found no subscribed push devices in the configured app. Check that this app's REST API key and App ID belong together, and that the native device shows Subscribed in this same OneSignal app. Native push permission is separate from browser permission.");
       }
       throw new Error(details);
     }
 
     const recipients = Number(resultBody.recipients);
     if (!Number.isFinite(recipients) || recipients <= 0) {
-      throw new Error("OneSignal found no subscribed users to notify. Each user must allow notifications in their browser and enable push notifications on the player website.");
+      throw new Error("OneSignal found no subscribed push devices in the configured app. Check that this app's REST API key and App ID belong together, and that the native device shows Subscribed in this same OneSignal app. Native push permission is separate from browser permission.");
     }
     response = {
       ok: true,
