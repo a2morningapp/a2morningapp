@@ -101,15 +101,20 @@ function doPost(event) {
           : resultBody.errors
             ? JSON.stringify(resultBody.errors)
             : "OneSignal rejected the request (HTTP " + status + ").";
+      if (/all included players are not subscribed/i.test(details)) {
+        throw new Error("No users are subscribed to push notifications yet. Each user must allow notifications in their browser and enable push notifications on the player website.");
+      }
       throw new Error(details);
     }
 
+    const recipients = Number(resultBody.recipients);
+    if (!Number.isFinite(recipients) || recipients <= 0) {
+      throw new Error("OneSignal found no subscribed users to notify. Each user must allow notifications in their browser and enable push notifications on the player website.");
+    }
     response = {
       ok: true,
       message: "Push notification sent to all subscribed users.",
-      recipients: Number.isFinite(Number(resultBody.recipients))
-        ? Number(resultBody.recipients)
-        : 0,
+      recipients: recipients,
       notificationId: String(resultBody.id || ""),
     };
   } catch (error) {
