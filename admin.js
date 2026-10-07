@@ -2020,19 +2020,25 @@ function sendPushBroadcast(heading, message) {
   }
   document.body.append(iframe, form);
   return new Promise((resolve) => {
-    const timeout = window.setTimeout(() => {
-      pendingBroadcasts.delete(nonce);
+    let pollTimer = 0;
+    let pollScript = null;
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(pollTimer);
+      pollScript?.remove();
       iframe.remove();
       form.remove();
+    };
+    const timeout = window.setTimeout(() => {
+      pendingBroadcasts.delete(nonce);
+      cleanup();
       toast("No response from Google Apps Script. Check deployment access and try again.", true);
       resolve(false);
     }, 45_000);
     pendingBroadcasts.set(nonce, {
       complete(response) {
-        window.clearTimeout(timeout);
         pendingBroadcasts.delete(nonce);
-        iframe.remove();
-        form.remove();
+        cleanup();
         if (!response.ok) {
           toast(`Push notification failed: ${response.message}`, true);
           resolve(false);
@@ -2042,33 +2048,46 @@ function sendPushBroadcast(heading, message) {
         resolve(true);
       },
     });
+    const checkStatus = () => {
+      if (pollScript?.isConnected) return;
+      pollScript = document.createElement("script");
+      pollScript.src = `${endpoint}?callback=kalyanBroadcastStatus&status=${encodeURIComponent(nonce)}`;
+      pollScript.async = true;
+      pollScript.onerror = () => {
+        pollScript?.remove();
+        pollScript = null;
+      };
+      pollScript.onload = () => {
+        pollScript?.remove();
+        pollScript = null;
+      };
+      document.head.append(pollScript);
+    };
+    pendingBroadcasts.get(nonce).checkStatus = checkStatus;
+    pollTimer = window.setInterval(checkStatus, 2000);
     try {
       form.submit();
+      window.setTimeout(checkStatus, 1000);
     } catch (error) {
-      window.clearTimeout(timeout);
       pendingBroadcasts.delete(nonce);
-      iframe.remove();
-      form.remove();
+      cleanup();
       toast(`Could not contact Google Apps Script: ${error.message}`, true);
       resolve(false);
     }
   });
 }
 
-window.addEventListener("message", (event) => {
-  const response = event.data;
-  if (!response || response.source !== "kalyan-gold-gas" || typeof response.nonce !== "string") return;
-  let responseHost = "";
-  try {
-    responseHost = new URL(event.origin).hostname;
-  } catch (error) {
-    return;
-  }
-  if (responseHost !== "script.google.com" && !responseHost.endsWith(".googleusercontent.com")) return;
+window.kalyanBroadcastStatus = (response) => {
+  if (!response || typeof response.nonce !== "string") return;
   const pending = pendingBroadcasts.get(response.nonce);
   if (!pending) return;
+  if (response.pending) return;
+  if (typeof response.ok !== "boolean") {
+    pending.complete({ ok: false, message: "Google Apps Script returned an invalid status." });
+    return;
+  }
   pending.complete(response);
-});
+};
 
 document.addEventListener("click", (event) => {
   const pageTarget = event.target.closest("[data-page]");
