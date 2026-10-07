@@ -1,12 +1,12 @@
 const firebaseConfig = {
-  apiKey: "AIzaSyDVZEqp2CKsKOWKv21_dUL9r-SbyOJPS4Q",
-  authDomain: "kalyan-gold-app.firebaseapp.com",
-  databaseURL: "https://kalyan-gold-app-default-rtdb.firebaseio.com",
-  projectId: "kalyan-gold-app",
-  storageBucket: "kalyan-gold-app.firebasestorage.app",
-  messagingSenderId: "838908612415",
-  appId: "1:838908612415:web:dfc6ebc1b2f789cd2b8d8a",
-  measurementId: "G-P8V3K5QK91"
+  apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
+  authDomain: "a2moring.firebaseapp.com",
+  databaseURL: "https://a2moring-default-rtdb.firebaseio.com",
+  projectId: "a2moring",
+  storageBucket: "a2moring.firebasestorage.app",
+  messagingSenderId: "528466835850",
+  appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
+  measurementId: "G-2HVR18MNEZ"
 };
 const DEFAULT_WEBSITE_URL = "https://mama567.bond";
 
@@ -420,6 +420,29 @@ async function loadAdminSettings() {
   applyAdminSettings(await dbGet(DATABASE_ROOTS.settings));
 }
 
+async function configuredSignUpBonus() {
+  const settings = decodeFirebaseObject(await dbGet(DATABASE_ROOTS.settings)) || {};
+  const rawBonus = settings.bonus ?? settings.Bonus ?? settings["Sign Up Bonus"] ?? 0;
+  const bonus = Number(decodeFirebaseValue(rawBonus));
+  if (!Number.isFinite(bonus) || bonus < 0) {
+    throw new Error("The configured signup bonus is not a valid non-negative amount.");
+  }
+  return bonus;
+}
+
+async function ensureUserBalance(profilePath) {
+  if (!window.firebase?.database) {
+    throw new Error("Firebase is unavailable; the account balance could not be initialized.");
+  }
+  const balanceRef = firebase.database().ref(`${profilePath}/bal`);
+  const existingBalance = await balanceRef.once("value");
+  if (existingBalance.exists()) return decodeFirebaseValue(existingBalance.val());
+
+  const bonus = await configuredSignUpBonus();
+  const result = await balanceRef.transaction(current => current === null ? bonus : undefined);
+  return decodeFirebaseValue(result.snapshot.val());
+}
+
 async function submitAuth(event) {
   event.preventDefault();
   const button = $("#auth-submit");
@@ -564,7 +587,9 @@ async function refreshUserData() {
     $("#header-avatar").textContent = profile.name.trim().charAt(0).toUpperCase() || "K";
   }
   state.balancePath = `${profilePath}/bal`;
-  state.balance = Number(profile?.bal ?? 0) || 0;
+  const balance = await ensureUserBalance(profilePath);
+  if (!state.user || state.user.phone !== phoneNumber) return;
+  state.balance = Number(decodeFirebaseValue(balance) ?? 0) || 0;
   const [bids, bidRecords] = await Promise.all([
     dbGet(`${DATABASE_ROOTS.bidHistory}/${phone}`),
     dbGet(`${DATABASE_ROOTS.bidRecords}/${phone}`)
