@@ -1,4 +1,22 @@
-function doGet() {
+function doGet(event) {
+  const parameters = typeof event === "undefined" ? {} : event.parameter || {};
+  const nonce = String(parameters.status || "");
+  const callback = String(parameters.callback || "");
+  if (/^[a-f0-9]{32}$/.test(nonce) && callback === "kalyanBroadcastStatus") {
+    const cached = CacheService.getScriptCache().get("broadcast-result-" + nonce);
+    let result = { nonce: nonce, pending: true };
+    if (cached) {
+      try {
+        result = JSON.parse(cached);
+      } catch (error) {
+        result = { nonce: nonce, ok: false, message: "The sender returned an invalid status response." };
+      }
+    }
+    const json = JSON.stringify(result).replace(/</g, "\\u003c");
+    return ContentService
+      .createTextOutput("kalyanBroadcastStatus(" + json + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
   return ContentService
     .createTextOutput("Kalyan Gold notification sender is ready.")
     .setMimeType(ContentService.MimeType.TEXT);
@@ -100,8 +118,16 @@ function doPost(event) {
     };
   }
 
-  return HtmlService.createHtmlOutput(buildParentResponse(nonce, response))
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  if (/^[a-f0-9]{32}$/.test(nonce)) {
+    CacheService.getScriptCache().put(
+      "broadcast-result-" + nonce,
+      JSON.stringify({ nonce: nonce, ...response }),
+      3600
+    );
+  }
+  return ContentService
+    .createTextOutput("Notification request processed.")
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 function constantTimeEquals(left, right) {
@@ -112,12 +138,4 @@ function constantTimeEquals(left, right) {
     difference |= leftDigest[index] ^ rightDigest[index];
   }
   return difference === 0;
-}
-
-function buildParentResponse(nonce, response) {
-  const message = JSON.stringify({ source: "kalyan-gold-gas", nonce, ...response })
-    .replace(/</g, "\\u003c")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-  return `<!doctype html><html><head><meta charset="utf-8"></head><body><script>window.top.postMessage(${message}, "*");</script></body></html>`;
 }
