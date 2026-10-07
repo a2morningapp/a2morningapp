@@ -52,13 +52,31 @@ function doPost(event) {
     const heading = String(parameters.heading || "").trim();
     const message = String(parameters.message || "").trim();
     const imageUrl = String(parameters.imageUrl || "").trim();
+    let externalIds;
+    try {
+      externalIds = JSON.parse(String(parameters.externalIds || "[]"));
+    } catch (error) {
+      throw new Error("The native player audience is invalid. Refresh the admin page and try again.");
+    }
     if (!heading || heading.length > 80 || !message || message.length > 1000) {
       throw new Error("Enter a title up to 80 characters and a message up to 1000 characters.");
     }
     if (!/^https:\/\/[^\s]+$/i.test(imageUrl)) {
       throw new Error("The notification logo must have a public HTTPS URL.");
     }
-
+    if (!Array.isArray(externalIds)) {
+      throw new Error("The native player audience is invalid. Refresh the admin page and try again.");
+    }
+    externalIds = Array.from(new Set(externalIds
+      .filter((id) => typeof id === "string")
+      .map((id) => id.trim())
+      .filter((id) => /^\d{10,}$/.test(id))));
+    if (!externalIds.length) {
+      throw new Error("No native player external IDs were provided. Refresh the admin page and try again.");
+    }
+    if (externalIds.length > 20000) {
+      throw new Error("The native audience exceeds OneSignal's 20,000-user per-message limit.");
+    }
     const requestCache = CacheService.getScriptCache();
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) {
@@ -77,7 +95,8 @@ function doPost(event) {
     const notification = {
       app_id: appId,
       target_channel: "push",
-      included_segments: ["Subscribed Users"],
+      include_aliases: { external_id: externalIds },
+      isAndroid: true,
       headings: { en: heading },
       contents: { en: message },
       chrome_web_icon: imageUrl,
@@ -107,14 +126,14 @@ function doPost(event) {
             ? JSON.stringify(resultBody.errors)
             : "OneSignal rejected the request (HTTP " + status + ").";
       if (/all included players are not subscribed/i.test(details)) {
-        throw new Error("OneSignal found no subscribed push devices in the configured app. Check that this app's REST API key and App ID belong together, and that the native device shows Subscribed in this same OneSignal app. Native push permission is separate from browser permission.");
+        throw new Error("OneSignal found no subscribed Android push devices among the native player external IDs. Confirm the current native app has logged these players in to this same OneSignal app, and that their Android subscriptions are marked Subscribed.");
       }
       throw new Error(details);
     }
 
     const recipients = Number(resultBody.recipients);
     if (!Number.isFinite(recipients) || recipients <= 0) {
-      throw new Error("OneSignal found no subscribed push devices in the configured app. Check that this app's REST API key and App ID belong together, and that the native device shows Subscribed in this same OneSignal app. Native push permission is separate from browser permission.");
+      throw new Error("OneSignal found no subscribed Android push devices among the native player external IDs. Confirm the current native app has logged these players in to this same OneSignal app, and that their Android subscriptions are marked Subscribed.");
     }
     response = {
       ok: true,
