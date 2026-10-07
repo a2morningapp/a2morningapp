@@ -22,11 +22,11 @@ window.OneSignalDeferred.push(async OneSignal => {
     });
     oneSignalClient = OneSignal;
     oneSignalInitError = "";
-    if (state.page === "profile" && state.user) renderPage();
+    if (state.user && ["home", "profile"].includes(state.page)) renderPage();
   } catch (error) {
     oneSignalInitError = error.message || "OneSignal could not be initialized.";
     window.setTimeout(() => {
-      if (state.page === "profile" && state.user) renderPage();
+      if (state.user && ["home", "profile"].includes(state.page)) renderPage();
     }, 0);
   }
 });
@@ -1098,6 +1098,27 @@ function heading(title, description, action = "") {
   return `<div class="page-heading"><div><h1>${safeText(title)}</h1><p>${safeText(description)}</p></div>${action ? `<div class="heading-actions">${action}</div>` : ""}</div>`;
 }
 
+function renderPushNotificationsPanel() {
+  const subscription = oneSignalClient?.User?.PushSubscription;
+  const permission = "Notification" in window ? Notification.permission : "unsupported";
+  let status = "Push notification setup is loading.";
+  if (oneSignalInitError) {
+    status = oneSignalInitError;
+  } else if (permission === "unsupported") {
+    status = "This browser does not support web push notifications.";
+  } else if (permission === "denied") {
+    status = "Notifications are blocked for this website. Allow notifications in your browser's site settings, reload this page, then enable them here.";
+  } else if (subscription?.optedIn) {
+    status = "Notifications are enabled on this browser.";
+  } else if (oneSignalClient) {
+    status = "Enable notifications on this browser to receive market results and notices.";
+  }
+  const canOptIn = Boolean(oneSignalClient && permission !== "denied" && permission !== "unsupported" && !subscription?.optedIn);
+  return `<section class="panel"><div class="panel-heading"><h2>Push notifications</h2></div><p class="muted">${safeText(status)}</p>${canOptIn
+    ? `<button class="button button-secondary" type="button" data-action="enable-push-notifications">Enable notifications</button>`
+    : ""}</section>`;
+}
+
 function renderWebViewer() {
   if (!state.webViewerUrl) {
     return `${heading("Web viewer", "The requested page could not be opened.")}<div class="empty-state"><strong>No page selected</strong>Choose Results or a market result to load a page here.</div>`;
@@ -1201,6 +1222,7 @@ function renderHome() {
   return `<section class="aia-home-intro"><div><small>WELCOME BACK</small><h1>${safeText(firstName)}</h1></div><div class="aia-home-actions"><button type="button" data-page="deposit">＋ Add points</button><button type="button" data-page="withdraw">Withdraw</button></div></section>
     ${state.maintenance ? `<div class="notice-strip"><strong>MAINTENANCE</strong><span>Game play is temporarily unavailable. Please check back later.</span></div>` : ""}
     ${notice ? `<div class="notice-strip"><strong>NOTICE</strong><span>${safeText(notice.message)}</span></div>` : ""}
+    ${renderPushNotificationsPanel()}
     <div class="aia-support-actions">
       <button class="aia-support-whatsapp" type="button" data-action="open-whatsapp"><span aria-hidden="true">◉</span> WhatsApp support</button>
       <button class="aia-support-telegram" type="button" data-action="open-telegram"><span aria-hidden="true">➤</span> Telegram</button>
@@ -1480,7 +1502,7 @@ function renderHowTo() {
 function renderProfile() {
   return `${heading("My profile", "Manage the details associated with your account.")}
     <div class="profile-grid"><section><div class="profile-summary"><span class="avatar">${safeText(state.user.name.trim().charAt(0).toUpperCase() || "K")}</span><span><strong>${safeText(state.user.name)}</strong><small>+91 ${safeText(state.user.phone)}</small></span></div>
-      <section class="panel"><div class="panel-heading"><h2>Push notifications</h2></div><p class="muted">Enable notifications on this device to receive market updates.</p><button class="button button-secondary" type="button" data-action="enable-push-notifications" ${oneSignalClient ? "" : "disabled"}>${oneSignalClient?.User.PushSubscription.optedIn ? "Notifications enabled" : "Enable notifications"}</button>${oneSignalInitError ? `<p class="inline-message">${safeText(oneSignalInitError)}</p>` : ""}</section>
+      ${renderPushNotificationsPanel()}
       <section class="panel"><div class="panel-heading"><h2>Personal details</h2></div><form id="profile-form" class="form-stack">
         <label class="field">Full name<input name="name" type="text" required maxlength="60" value="${safeText(state.user.name)}"></label>
         <label class="field">Phone number<input type="tel" value="+91 ${safeText(state.user.phone)}" disabled></label>
@@ -1860,28 +1882,30 @@ function handleClick(event) {
       notify(oneSignalInitError || "Push notifications are still loading. Try again shortly.", "error");
       return;
     }
+    if (!("Notification" in window)) {
+      notify("This browser does not support web push notifications.", "error");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      notify("Notifications are blocked for this website. Allow them in your browser's site settings, then reload this page.", "error");
+      return;
+    }
     const button = target;
     button.disabled = true;
-    try {
-      const optInResult = oneSignalClient.User.PushSubscription.optIn();
-      void Promise.resolve(optInResult).then(() => {
-        button.textContent = oneSignalClient.User.PushSubscription.optedIn
-          ? "Notifications enabled"
-          : "Enable notifications";
+    void (async () => {
+      try {
+        await oneSignalClient.User.PushSubscription.optIn();
         if (oneSignalClient.User.PushSubscription.optedIn) {
           notify("Push notifications are enabled on this device.");
         } else {
           notify("Push notifications were not enabled for this device.", "error");
         }
-      }).catch(error => {
+      } catch (error) {
         notify(error.message || "Could not enable push notifications.", "error");
-      }).finally(() => {
-        button.disabled = false;
-      });
-    } catch (error) {
-      button.disabled = false;
-      notify(error.message || "Could not enable push notifications.", "error");
-    }
+      } finally {
+        await renderPage();
+      }
+    })();
     return;
   }
   if (target.dataset.action === "forgot-password") {
