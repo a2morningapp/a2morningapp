@@ -59,7 +59,7 @@ function doPost(event) {
       throw new Error("Another notification request is being processed. Try again shortly.");
     }
     try {
-      const nonceCacheKey = `broadcast-${nonce}`;
+      const nonceCacheKey = "broadcast-" + nonce;
       if (requestCache.get(nonceCacheKey)) {
         throw new Error("This notification request has already been processed.");
       }
@@ -81,7 +81,7 @@ function doPost(event) {
     const result = UrlFetchApp.fetch("https://api.onesignal.com/notifications?c=push", {
       method: "post",
       contentType: "application/json",
-      headers: { Authorization: `Key ${restApiKey}` },
+      headers: { Authorization: "Key " + restApiKey },
       payload: JSON.stringify(notification),
       muteHttpExceptions: true,
     });
@@ -90,7 +90,7 @@ function doPost(event) {
     try {
       resultBody = JSON.parse(result.getContentText());
     } catch (error) {
-      throw new Error(`OneSignal returned an unreadable response (HTTP ${status}).`);
+      throw new Error("OneSignal returned an unreadable response (HTTP " + status + ").");
     }
     if (status < 200 || status >= 300 || resultBody.errors) {
       const details = Array.isArray(resultBody.errors)
@@ -99,7 +99,7 @@ function doPost(event) {
           ? resultBody.errors
           : resultBody.errors
             ? JSON.stringify(resultBody.errors)
-            : `OneSignal rejected the request (HTTP ${status}).`;
+            : "OneSignal rejected the request (HTTP " + status + ").";
       throw new Error(details);
     }
 
