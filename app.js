@@ -8,7 +8,28 @@ const firebaseConfig = {
   appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
   measurementId: "G-2HVR18MNEZ"
 };
+const ONESIGNAL_APP_ID = "e1183bae-f7b7-4122-90a7-10d72adf87e2";
 const DEFAULT_WEBSITE_URL = "https://mama567.bond";
+
+let oneSignalClient = null;
+let oneSignalInitError = "";
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+window.OneSignalDeferred.push(async OneSignal => {
+  try {
+    await OneSignal.init({
+      appId: ONESIGNAL_APP_ID,
+      allowLocalhostAsSecureOrigin: true
+    });
+    oneSignalClient = OneSignal;
+    oneSignalInitError = "";
+    if (state.page === "profile" && state.user) renderPage();
+  } catch (error) {
+    oneSignalInitError = error.message || "OneSignal could not be initialized.";
+    window.setTimeout(() => {
+      if (state.page === "profile" && state.user) renderPage();
+    }, 0);
+  }
+});
 
 if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
@@ -55,6 +76,9 @@ const state = {
   markets: [],
   marketLoadError: "",
   signUpBonus: 0,
+  minimumEntry: 0,
+  maximumEntry: 0,
+  withdrawTiming: "",
   category: "Main",
   selectedGame: "Single",
   selectedMarket: "",
@@ -408,6 +432,11 @@ function openExternalUrl(value, label) {
 function applyAdminSettings(value) {
   const settings = decodeFirebaseObject(value) || {};
   state.signUpBonus = Number(decodeFirebaseValue(settings["Sign Up Bonus"]) || 0);
+  const minimumEntry = Number(decodeFirebaseValue(settings["Min Entry"]) || 0);
+  const maximumEntry = Number(decodeFirebaseValue(settings["Max Entry"]) || 0);
+  state.minimumEntry = Number.isFinite(minimumEntry) ? Math.max(0, minimumEntry) : 0;
+  state.maximumEntry = Number.isFinite(maximumEntry) ? Math.max(0, maximumEntry) : 0;
+  state.withdrawTiming = String(decodeFirebaseValue(settings["Withdraw Timing"]) || "").trim();
   state.maintenance = /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.Maintanance) || ""));
   state.newRegistrations = settings.EnableNewRegistrations === undefined
     ? true : /^(true|1|yes|on)$/i.test(String(decodeFirebaseValue(settings.EnableNewRegistrations)));
@@ -481,6 +510,11 @@ async function submitAuth(event) {
     }
     const recordPath = `${DATABASE_ROOTS.users}/${phone}`;
     const record = decodeFirebaseObject(await dbGet(recordPath));
+    const blocked = decodeFirebaseValue(await dbGet(`Blocked/${phone}`));
+    if (blocked !== null && blocked !== undefined && blocked !== false && blocked !== 0
+      && !/^(false|0|no|off|x)?$/i.test(String(blocked).trim())) {
+      throw new Error("This account has been blocked. Contact support for help.");
+    }
     if (state.authMode === "signup") {
       if (record) throw new Error("An account with this phone number already exists.");
       const bonus = await dbGet(`${DATABASE_ROOTS.settings}/Sign Up Bonus`);
@@ -559,7 +593,25 @@ function logout() {
   $("#sidebar").classList.remove("open");
 }
 
-async function enterApp() {
+async function enterApp(verifyRestoredAccount = false) {
+  if (!state.user) return;
+  if (verifyRestoredAccount) {
+    const phone = state.user.phone;
+    try {
+      const blocked = decodeFirebaseValue(await dbGet(`Blocked/${phonePath(phone)}`));
+      if (!state.user || state.user.phone !== phone) return;
+      if (blocked !== null && blocked !== undefined && blocked !== false && blocked !== 0
+        && !/^(false|0|no|off|x)?$/i.test(String(blocked).trim())) {
+        logout();
+        notify("This account has been blocked. Contact support for help.", "error");
+        return;
+      }
+    } catch (error) {
+      logout();
+      notify(error.message || "Could not verify account access.", "error");
+      return;
+    }
+  }
   stopRealtimeSubscriptions();
   state.page = "home";
   state.balance = 0;
@@ -762,7 +814,8 @@ function startRealtimeSubscriptions() {
   for (const path of [
     `${DATABASE_ROOTS.users}/${phone}`,
     `${DATABASE_ROOTS.bidHistory}/${phone}`,
-    `${DATABASE_ROOTS.bidRecords}/${phone}`
+    `${DATABASE_ROOTS.bidRecords}/${phone}`,
+    `Blocked/${phone}`
   ]) {
     watchFirebasePath(path, "user");
   }
@@ -807,6 +860,14 @@ function watchFirebasePath(path, refreshGroup) {
 
 function applyRealtimeValue(path, value) {
   const decoded = decodeFirebaseValue(value);
+  const blockedMatch = path.match(/^Blocked\/(\d{10,})$/);
+  if (blockedMatch && state.user?.phone === blockedMatch[1]
+    && decoded !== null && decoded !== undefined && decoded !== false && decoded !== 0
+    && !/^(false|0|no|off|x)?$/i.test(String(decoded).trim())) {
+    logout();
+    notify("This account has been blocked. Contact support for help.", "error");
+    return;
+  }
   if (path === "Date") {
     const dateInfo = decodeFirebaseObject(value) || {};
     state.marketDay = String(dateInfo.day || "").replace(/^"|"$/g, "");
@@ -1211,7 +1272,8 @@ function renderBetting() {
         <input id="bet-selection" name="selection" type="text" maxlength="30" autocomplete="off" inputmode="numeric">
         <div class="aia-suggestion-list">${suggestions.map(number => `<button type="button" data-number="${number}">${number}</button>`).join("")}</div>
         <label for="bet-amount">Enter Points :</label>
-        <input id="bet-amount" name="amount" type="number" min="1" max="${remaining}" step="1" inputmode="numeric">
+        <input id="bet-amount" name="amount" type="number" min="${Math.max(1, state.minimumEntry)}" max="${state.maximumEntry > 0 ? Math.min(state.maximumEntry, remaining) : remaining}" step="1" inputmode="numeric">
+        ${state.minimumEntry > 0 || state.maximumEntry > 0 ? `<small class="muted">${state.minimumEntry > 0 ? `Minimum ${state.minimumEntry} points per number.` : ""}${state.maximumEntry > 0 ? ` Maximum ${state.maximumEntry} points per number.` : ""}</small>` : ""}
       </div>
       <button class="aia-yellow-button aia-add-button" type="button" data-action="add-bet" ${remaining < 1 ? "disabled" : ""}>ADD</button>
       <section class="aia-draft-card">
@@ -1326,7 +1388,7 @@ function renderWithdraw() {
         <label class="field">Google Pay number<input name="googlePay" type="tel" maxlength="20" value="${safeText(saved.googlePay || "")}" placeholder="Optional"></label>
         <label class="field">Amount (₹)<input name="amount" type="number" min="1" step="1" max="${Math.max(0, state.balance)}" value="${safeText(saved.amount || "")}" required placeholder="Enter amount"></label>
         <button class="button button-primary" type="submit">Send withdrawal request <span>→</span></button>
-      </form><div class="warning-box">Your withdrawal details stay in this browser tab and are sent only when you submit a request.</div>
+      </form>${state.withdrawTiming ? `<div class="warning-box">${safeText(state.withdrawTiming)}</div>` : ""}<div class="warning-box">Your withdrawal details stay in this browser tab and are sent only when you submit a request.</div>
     </section><section class="panel"><div class="panel-heading"><h2>Recent withdrawal requests</h2></div>${historyTable(state.withdrawalHistory, "withdrawals")}</section></div>`;
 }
 
@@ -1418,6 +1480,7 @@ function renderHowTo() {
 function renderProfile() {
   return `${heading("My profile", "Manage the details associated with your account.")}
     <div class="profile-grid"><section><div class="profile-summary"><span class="avatar">${safeText(state.user.name.trim().charAt(0).toUpperCase() || "K")}</span><span><strong>${safeText(state.user.name)}</strong><small>+91 ${safeText(state.user.phone)}</small></span></div>
+      <section class="panel"><div class="panel-heading"><h2>Push notifications</h2></div><p class="muted">Enable notifications on this device to receive market updates.</p><button class="button button-secondary" type="button" data-action="enable-push-notifications" ${oneSignalClient ? "" : "disabled"}>${oneSignalClient?.User.PushSubscription.optedIn ? "Notifications enabled" : "Enable notifications"}</button>${oneSignalInitError ? `<p class="inline-message">${safeText(oneSignalInitError)}</p>` : ""}</section>
       <section class="panel"><div class="panel-heading"><h2>Personal details</h2></div><form id="profile-form" class="form-stack">
         <label class="field">Full name<input name="name" type="text" required maxlength="60" value="${safeText(state.user.name)}"></label>
         <label class="field">Phone number<input type="tel" value="+91 ${safeText(state.user.phone)}" disabled></label>
@@ -1445,6 +1508,13 @@ async function submitBid(event) {
   const session = state.selectedSession;
   if (!(session === "Open" ? state.openBets : state.closeBets)) {
     notify(`The ${session.toLowerCase()} session is currently unavailable.`, "error");
+    return;
+  }
+  if (state.betDraft.some(item => !Number.isFinite(item.amount)
+    || item.amount <= 0
+    || (state.minimumEntry > 0 && item.amount < state.minimumEntry)
+    || (state.maximumEntry > 0 && item.amount > state.maximumEntry))) {
+    notify("One or more bid amounts are outside the current per-number limits.", "error");
     return;
   }
   const total = state.betDraft.reduce((sum, item) => sum + item.amount, 0);
@@ -1518,6 +1588,14 @@ function addBetDraft() {
   const total = state.betDraft.reduce((sum, item) => sum + item.amount, 0);
   if (!selection || !Number.isFinite(amount) || amount <= 0) {
     notify("Enter a number and valid points amount.", "error");
+    return;
+  }
+  if (state.minimumEntry > 0 && amount < state.minimumEntry) {
+    notify(`Each number requires at least ${state.minimumEntry} points.`, "error");
+    return;
+  }
+  if (state.maximumEntry > 0 && amount > state.maximumEntry) {
+    notify(`Each number allows at most ${state.maximumEntry} points.`, "error");
     return;
   }
   if (amount > state.balance - total) {
@@ -1777,6 +1855,35 @@ function handleClick(event) {
     if (frame) frame.src = state.webViewerUrl;
     return;
   }
+  if (target.dataset.action === "enable-push-notifications") {
+    if (!oneSignalClient) {
+      notify(oneSignalInitError || "Push notifications are still loading. Try again shortly.", "error");
+      return;
+    }
+    const button = target;
+    button.disabled = true;
+    try {
+      const optInResult = oneSignalClient.User.PushSubscription.optIn();
+      void Promise.resolve(optInResult).then(() => {
+        button.textContent = oneSignalClient.User.PushSubscription.optedIn
+          ? "Notifications enabled"
+          : "Enable notifications";
+        if (oneSignalClient.User.PushSubscription.optedIn) {
+          notify("Push notifications are enabled on this device.");
+        } else {
+          notify("Push notifications were not enabled for this device.", "error");
+        }
+      }).catch(error => {
+        notify(error.message || "Could not enable push notifications.", "error");
+      }).finally(() => {
+        button.disabled = false;
+      });
+    } catch (error) {
+      button.disabled = false;
+      notify(error.message || "Could not enable push notifications.", "error");
+    }
+    return;
+  }
   if (target.dataset.action === "forgot-password") {
     const phone = $("#auth-phone").value.replace(/\D/g, "");
     if (!/^\d{10}$/.test(phone)) {
@@ -1908,12 +2015,12 @@ if (sharedUserSession) {
     name: sharedUserSession.name
   };
   localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
-  void enterApp();
+  void enterApp(true);
   void loadAdminSettings().catch(error => {
     notify(error.message || "Unable to load support settings.", "error");
   });
 } else if (restoreSession()) {
-  void enterApp();
+  void enterApp(true);
 } else {
   showAuth("signup");
   void loadAdminSettings().catch(error => {

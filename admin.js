@@ -8,6 +8,10 @@ const firebaseConfig = {
   appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
   measurementId: "G-2HVR18MNEZ",
 };
+const ADMIN_SESSION_KEY = "kalyanGoldAdminSession";
+const BROADCAST_ENDPOINT_KEY = "kalyanGoldBroadcastEndpoint";
+const BROADCAST_TOKEN_KEY = "kalyanGoldBroadcastToken";
+const pendingBroadcasts = new Map();
 
 const navigation = [
   { section: "OVERVIEW" },
@@ -70,6 +74,9 @@ const defaultData = {
     closeBets: true,
     signUpBonus: 0,
     minimumWithdrawal: 0,
+    minimumEntry: 0,
+    maximumEntry: 0,
+    withdrawTiming: "",
     policy: "",
     websiteUrl: "",
     contactUrl: "",
@@ -531,6 +538,9 @@ function normalizeLegacyData(root) {
       ? true : /^(true|1|yes|on)$/i.test(String(adminSettings.EnableCloseBets));
     legacy.settings.signUpBonus = numberFromLegacy(adminSettings["Sign Up Bonus"] ?? adminSettings.bonus ?? adminSettings.Bonus);
     legacy.settings.minimumWithdrawal = numberFromLegacy(adminSettings.MW);
+    legacy.settings.minimumEntry = numberFromLegacy(adminSettings["Min Entry"]);
+    legacy.settings.maximumEntry = numberFromLegacy(adminSettings["Max Entry"]);
+    legacy.settings.withdrawTiming = String(decodeLegacyValue(adminSettings["Withdraw Timing"]) || "");
     const policy = decodeLegacyValue(adminSettings.Policy);
     legacy.settings.policy = Array.isArray(policy) ? policy.join("\n\n") : String(policy || "");
     legacy.settings.websiteUrl = String(decodeLegacyValue(adminSettings.Website) || "");
@@ -709,6 +719,7 @@ let todayNewUsers = [];
 let gameAccessByMobile = new Set();
 let lastSeenByMobile = new Map();
 let lastSyncedData = null;
+let lastPersistPromise = Promise.resolve(true);
 let databaseRef;
 let databaseRootRef;
 let adminAuthenticated = false;
@@ -721,6 +732,8 @@ let transactionQuery = "";
 let requestQuery = "";
 let playedQuery = "";
 let playedPlayerFilter = "All";
+let playedMarketFilter = "All";
+let playerHistorySearch = "";
 let resultMarketSelection = "";
 let resultSessionSelection = "Open";
 let resultDateSelection = localDateKey();
@@ -779,6 +792,9 @@ function signOutAdmin() {
   gameAccessByMobile = new Set();
   lastSeenByMobile = new Map();
   currentPage = "dashboard";
+  localStorage.removeItem(ADMIN_SESSION_KEY);
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  sessionStorage.removeItem(BROADCAST_TOKEN_KEY);
   document.getElementById("sidebar").classList.remove("open");
   document.querySelector(".mobile-menu").setAttribute("aria-expanded", "false");
   document.getElementById("modal-root").innerHTML = "";
@@ -816,6 +832,9 @@ function legacyUpdatesFor(changed, previous) {
     ["closeBets", "EnableCloseBets"],
     ["signUpBonus", "Sign Up Bonus"],
     ["minimumWithdrawal", "MW"],
+    ["minimumEntry", "Min Entry"],
+    ["maximumEntry", "Max Entry"],
+    ["withdrawTiming", "Withdraw Timing"],
     ["policy", "Policy"],
     ["websiteUrl", "Website"],
     ["contactUrl", "Contact"],
@@ -913,20 +932,27 @@ function persist(message = "Changes saved.") {
   }
   if (!databaseRef) {
     toast("Connection unavailable. Changes could not be saved.", true);
-    return;
+    lastPersistPromise = Promise.resolve(false);
+    return lastPersistPromise;
   }
-  if (Object.keys(changed).length === 0) return;
+  if (Object.keys(changed).length === 0) {
+    lastPersistPromise = Promise.resolve(true);
+    return lastPersistPromise;
+  }
   const updates = {};
   for (const [key, value] of Object.entries(changed)) updates[`adminData/${key}`] = value;
   const legacyUpdates = legacyUpdatesFor(changed, previous);
   Object.assign(updates, legacyUpdates);
-  databaseRootRef.update(updates).then(() => {
+  lastPersistPromise = databaseRootRef.update(updates).then(() => {
     lastSyncedData = snapshot;
     if (message) toast(message);
+    return true;
   }).catch((error) => {
     setConnectionStatus("Sync error", "Check database access rules", "error");
     toast(`Save failed: ${error.message}`, true);
+    return false;
   });
+  return lastPersistPromise;
 }
 
 function money(amount) {
@@ -1120,7 +1146,7 @@ function ratesPage() {
 }
 
 function transactionTable(rows) {
-  return rows.length ? `<div class="table-wrap"><table><thead><tr><th>Reference</th><th>Player</th><th>Last seen</th><th>Type</th><th>Amount</th><th>Date & time</th><th>Details</th></tr></thead><tbody>${rows.map((item) => `<tr><td><strong>${escapeHtml(item.id)}</strong></td><td>${escapeHtml(item.player)}<small style="display:block;color:#9aa3b1;margin-top:3px">${escapeHtml(item.mobile)}</small></td><td>${escapeHtml(lastSeenLabel(item.mobile))}</td><td>${escapeHtml(item.type)}</td><td><strong style="color:${item.amount >= 0 ? "#16866f" : "#475368"}">${item.amountUnavailable ? "—" : `${item.amount > 0 ? "+" : ""}${money(item.amount)}`}</strong></td><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.note)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No matching transactions.</div>`;
+  return rows.length ? `<div class="table-wrap"><table><thead><tr><th title="Unique record key used to identify this transaction">Transaction ID</th><th>Player</th><th>Last seen</th><th>Type</th><th>Amount</th><th>Date & time</th><th>Details</th></tr></thead><tbody>${rows.map((item) => `<tr><td><strong>${escapeHtml(item.id)}</strong></td><td>${escapeHtml(item.player)}<small style="display:block;color:#9aa3b1;margin-top:3px">${escapeHtml(item.mobile)}</small></td><td>${escapeHtml(lastSeenLabel(item.mobile))}</td><td>${escapeHtml(item.type)}</td><td><strong style="color:${item.amount >= 0 ? "#16866f" : "#475368"}">${item.amountUnavailable ? "—" : `${item.amount > 0 ? "+" : ""}${money(item.amount)}`}</strong></td><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.note)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No matching transactions.</div>`;
 }
 
 function transactionsPage() {
@@ -1139,6 +1165,8 @@ function playedPage() {
     const id = bet.playerId || bet.mobile || "";
     return [id, { id, name: bet.player || player?.name || id, mobile: bet.mobile || player?.mobile || id }];
   }).filter(([id]) => id)).values()).sort((left, right) => left.name.localeCompare(right.name));
+  const marketNames = Array.from(new Set(data.bets.map((bet) => bet.market).filter(Boolean))).sort((left, right) => left.localeCompare(right));
+  if (playedMarketFilter !== "All" && !marketNames.includes(playedMarketFilter)) playedMarketFilter = "All";
   if (playedPlayerFilter !== "All" && !playedPlayers.some((player) => player.id === playedPlayerFilter)) {
     playedPlayerFilter = "All";
   }
@@ -1146,8 +1174,14 @@ function playedPage() {
     .filter((bet) => {
       const player = data.players.find((item) => item.id === bet.playerId || item.mobile === bet.playerId);
       const mobile = bet.mobile || player?.mobile || bet.playerId || "";
+      const query = playedQuery.trim().toLowerCase();
+      const rawDigits = query.replace(/\D/g, "");
+      const queryDigits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits;
+      const textMatch = `${bet.player} ${mobile} ${bet.market} ${bet.session} ${bet.type} ${bet.number}`.toLowerCase().includes(query);
+      const phoneMatch = queryDigits.length > 0 && String(mobile).replace(/\D/g, "").includes(queryDigits);
       return (playedPlayerFilter === "All" || (bet.playerId || mobile) === playedPlayerFilter)
-        && `${bet.player} ${mobile} ${bet.market} ${bet.session} ${bet.type} ${bet.number}`.toLowerCase().includes(playedQuery.toLowerCase());
+        && (playedMarketFilter === "All" || bet.market === playedMarketFilter)
+        && (!query || textMatch || phoneMatch);
     })
     .slice()
     .sort((left, right) => {
@@ -1161,7 +1195,10 @@ function playedPage() {
     const mobile = bet.mobile || player?.mobile || "";
     return `<tr><td>${escapeHtml(bet.player)}</td><td>${escapeHtml(mobile || "—")}</td><td>${escapeHtml(lastSeenLabel(mobile))}</td><td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session || "—")}</td><td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td><td>${money(bet.points)}</td><td>${escapeHtml(bet.date)}</td><td>${editable ? `<button class="button small" data-action="edit-bid" data-id="${escapeHtml(bet.id)}">Change number</button>` : `<span title="The legacy bid details could not be matched uniquely.">Not editable</span>`}</td></tr>`;
   }).join("")}</tbody></table></div>` : `<div class="empty-state">No game entries match this search.</div>`;
-  return `${pageHeading("Bid history & played games", "Review player bids from the website and legacy AIA records, filter by player, and change a bid number.", button("Player list", "go-players"))}<section class="panel"><div class="panel-head"><div><h2>Player game activity</h2><p>${playedPlayers.length} player${playedPlayers.length === 1 ? "" : "s"} · ${rows.length} bid${rows.length === 1 ? "" : "s"} shown</p></div></div><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="played-search" class="field" type="search" placeholder="Search player, mobile, market, or number..." value="${escapeHtml(playedQuery)}"></div><select id="played-player-filter" class="select"><option value="All">All players</option>${playedPlayers.map((player) => `<option value="${escapeHtml(player.id)}"${playedPlayerFilter === player.id ? " selected" : ""}>${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("")}</select></div>${table}</section>`;
+  const marketCounts = new Map(marketNames.map((name) => [name, data.bets.filter((bet) => bet.market === name).length]));
+  const marketFilters = `<div class="market-history-filters" aria-label="Filter bids by market"><button class="button small ${playedMarketFilter === "All" ? "primary" : ""}" data-action="filter-market" data-market="All" aria-pressed="${playedMarketFilter === "All"}">All markets <span>${data.bets.length}</span></button>${marketNames.map((name) => `<button class="button small ${playedMarketFilter === name ? "primary" : ""}" data-action="filter-market" data-market="${escapeHtml(name)}" aria-pressed="${playedMarketFilter === name}">${escapeHtml(name)} <span>${marketCounts.get(name)}</span></button>`).join("")}</div>`;
+  const playersShown = new Set(rows.map((bet) => bet.mobile || bet.playerId).filter(Boolean)).size;
+  return `${pageHeading("Bid history & played games", "Choose a market to see every player who bid in it, then search or narrow by player.", button("Player list", "go-players"))}<section class="panel"><div class="panel-head"><div><h2>${playedMarketFilter === "All" ? "All market bids" : `${escapeHtml(playedMarketFilter)} bids`}</h2><p>${playersShown} player${playersShown === 1 ? "" : "s"} · ${rows.length} bid${rows.length === 1 ? "" : "s"} shown</p></div></div>${marketFilters}<div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="played-search" class="field" type="search" placeholder="Search player, mobile, market, or number..." value="${escapeHtml(playedQuery)}"></div><select id="played-player-filter" class="select"><option value="All">All players</option>${playedPlayers.map((player) => `<option value="${escapeHtml(player.id)}"${playedPlayerFilter === player.id ? " selected" : ""}>${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("")}</select></div>${table}</section>`;
 }
 
 function reportsPage() {
@@ -1180,9 +1217,10 @@ function reportsPage() {
 }
 
 function noticesPage() {
+  const senderReady = Boolean(sessionStorage.getItem(BROADCAST_TOKEN_KEY));
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
-    <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update message</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Broadcast notice</h2><p>Compose an announcement. Push notification delivery requires a configured provider.</p></div></div><button class="button" data-action="broadcast">Compose notice</button></section>`;
+    <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Google Apps Script sender</h2><p>${senderReady ? "Sender configured for this admin session." : "Configure the deployed Apps Script URL and broadcast token to enable push delivery."}</p></div><button class="button" type="button" data-action="configure-broadcast">Configure sender</button></div><p class="hint">Market result updates and notice changes will be sent to all OneSignal subscribers.</p></section>`;
 }
 
 function settingsPage() {
@@ -1203,6 +1241,9 @@ function settingsPage() {
       <form id="player-settings-form"><div class="form-grid">
         <div class="form-field"><label for="signup-bonus">Sign-up bonus (points)</label><input id="signup-bonus" class="field" name="signUpBonus" type="number" min="0" step="0.01" value="${escapeHtml(settings.signUpBonus)}" required></div>
         <div class="form-field"><label for="minimum-withdrawal">Minimum withdrawal (₹)</label><input id="minimum-withdrawal" class="field" name="minimumWithdrawal" type="number" min="0" step="1" value="${escapeHtml(settings.minimumWithdrawal)}" required></div>
+        <div class="form-field"><label for="minimum-entry">Minimum bid points</label><input id="minimum-entry" class="field" name="minimumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.minimumEntry)}" required><div class="hint">Minimum points for each number; 0 disables the limit.</div></div>
+        <div class="form-field"><label for="maximum-entry">Maximum bid points</label><input id="maximum-entry" class="field" name="maximumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.maximumEntry)}" required><div class="hint">Maximum points for each number; 0 disables the limit.</div></div>
+        <div class="form-field full"><label for="withdraw-timing">Withdrawal timing message</label><input id="withdraw-timing" class="field" name="withdrawTiming" maxlength="120" value="${escapeHtml(settings.withdrawTiming)}" placeholder="For example: Withdrawals are processed 24/7"></div>
         <div class="form-field"><label for="player-website-url">Results website URL</label><input id="player-website-url" class="field" name="websiteUrl" type="text" value="${escapeHtml(settings.websiteUrl)}" placeholder="https://example.com"></div>
         <div class="form-field"><label for="result-chart-url">Market result chart URL</label><input id="result-chart-url" class="field" name="resultChartUrl" type="text" value="${escapeHtml(settings.resultChartUrl)}" placeholder="https://example.com/results"></div>
         <div class="form-field"><label for="support-contact-url">WhatsApp support URL</label><input id="support-contact-url" class="field" name="contactUrl" type="text" value="${escapeHtml(settings.contactUrl)}" placeholder="https://wa.me/91..."></div>
@@ -1385,16 +1426,26 @@ function playerAccountPage() {
 }
 
 function playerHistoryPage() {
-  const player = activePlayer();
+  const query = playerHistorySearch.trim().toLowerCase();
+  const rawDigits = query.replace(/\D/g, "");
+  const queryDigits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits;
+  const matchesPlayer = (item) => !query
+    || `${item.name} ${item.mobile}`.toLowerCase().includes(query)
+    || (queryDigits.length > 0 && String(item.mobile).replace(/\D/g, "").includes(queryDigits));
+  const matchingPlayers = data.players.filter(matchesPlayer);
+  const player = matchingPlayers.find((item) => item.id === selectedPlayerId) || matchingPlayers[0];
+  const selector = `<div class="grid two-col"><div class="form-field"><label for="player-history-search">Search by name or phone</label><input id="player-history-search" class="field" type="search" inputmode="tel" placeholder="Enter player name or phone number" value="${escapeHtml(playerHistorySearch)}"></div><div class="form-field"><label for="portal-player">Select player</label><select id="portal-player" class="select">${matchingPlayers.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === player?.id ? " selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.mobile)}</option>`).join("")}</select></div></div>`;
+  if (player) selectedPlayerId = player.id;
   const transactions = data.transactions.filter((item) => item.mobile === player?.mobile);
-  const bets = data.bets.filter((item) => item.playerId === player?.id)
+  const bets = data.bets.filter((item) => player
+    && (item.playerId === player.id || item.playerId === player.mobile || item.mobile === player.mobile))
     .slice()
     .sort((left, right) => {
       const leftTime = Date.parse(left.createdAt || left.date);
       const rightTime = Date.parse(right.createdAt || right.date);
       return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
     });
-  return `${pageHeading("My game activity", `Game and wallet history for ${escapeHtml(player?.name || "the selected player")}.`, button("Place a game", "go-player-app"))}${playerSelect()}
+  return `${pageHeading("My game activity", `Game and wallet history for ${escapeHtml(player?.name || "the selected player")} · Last seen: ${escapeHtml(lastSeenLabel(player?.mobile))}.`, button("Place a game", "go-player-app"))}${selector}
     <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Game entries</h2><p>${bets.length} ${bets.length === 1 ? "entry" : "entries"}</p></div></div>${bets.length ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Game</th><th>Number</th><th>Points</th><th>Date</th></tr></thead><tbody>${bets.map((bet) => `<tr><td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session)}</td><td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td><td>${money(bet.points)}</td><td>${escapeHtml(bet.date)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No game entries yet.</div>`}</section>
     <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Wallet history</h2><p>${transactions.length} transaction${transactions.length === 1 ? "" : "s"}</p></div></div>${transactionTable(transactions)}</section>`;
 }
@@ -1444,23 +1495,49 @@ function render(preserveFocusedInput = false) {
 
 function goTo(page) {
   currentPage = page;
+  if (adminAuthenticated) history.pushState({ adminPage: page }, "", location.href);
   document.getElementById("sidebar").classList.remove("open");
   document.querySelector(".mobile-menu").setAttribute("aria-expanded", "false");
   render();
 }
 
+function establishAdminHistory() {
+  history.replaceState({ adminPage: "dashboard", adminBackstop: true }, "", location.href);
+  history.pushState({ adminPage: "dashboard" }, "", location.href);
+}
+
 function modal(title, body, onSubmit, options = {}) {
   const root = document.getElementById("modal-root");
   root.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal ${options.wide ? "wide" : ""}" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}"><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="Close">×</button></div><form id="modal-form"><div class="modal-body">${body}</div><div class="modal-foot"><button type="button" class="button" data-action="close-modal">Cancel</button><button type="submit" class="button primary">${escapeHtml(options.submitLabel || "Save")}</button></div></form></section></div>`;
-  root.querySelector(".modal").addEventListener("click", (event) => event.stopPropagation());
-  root.querySelector(".modal-backdrop").addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) root.innerHTML = "";
+  const backdrop = root.querySelector(".modal-backdrop");
+  const dialog = root.querySelector(".modal");
+  const close = () => { root.innerHTML = ""; };
+  dialog.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const closeButton = event.target.closest('[data-action="close-modal"]');
+    if (closeButton && closeButton !== backdrop) close();
   });
-  root.querySelector("#modal-form").addEventListener("submit", (event) => {
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) close();
+  });
+  root.querySelector("#modal-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (onSubmit(new FormData(event.currentTarget))) root.innerHTML = "";
+    const submit = event.submitter;
+    if (submit) submit.disabled = true;
+    try {
+      const previousSave = lastPersistPromise;
+      const result = await onSubmit(new FormData(event.currentTarget));
+      if (result) {
+        const saved = lastPersistPromise === previousSave ? true : await lastPersistPromise;
+        if (saved) close();
+      }
+    } catch (error) {
+      toast(`Could not save: ${error instanceof Error ? error.message : String(error)}`, true);
+    } finally {
+      if (submit?.isConnected) submit.disabled = false;
+    }
   });
-  root.querySelector("input,select,textarea")?.focus();
+  root.querySelector(".modal-body input:not([type=checkbox]),.modal-body select,.modal-body textarea")?.focus();
 }
 
 function playerModal(player) {
@@ -1627,6 +1704,7 @@ function resultModal(market) {
 }
 
 function saveResult(market, session, date, result) {
+  const previousResult = (market.results || []).find((item) => item.session === session && item.date === date)?.result;
   const historyItem = { session, date, result, updatedAt: new Date().toISOString() };
   market.results = market.results || [];
   const existingIndex = market.results.findIndex((item) => item.session === session && item.date === date);
@@ -1636,7 +1714,7 @@ function saveResult(market, session, date, result) {
   market.result = result;
   market.updatedAt = Date.now();
   data.transactions.unshift({ id: `R-${Date.now()}`, player: "System", mobile: "—", type: "Result", amount: 0, date: new Date().toLocaleString(), note: `${market.name} · ${session} · ${date} · ${result}` });
-  return result;
+  return previousResult !== result;
 }
 
 function distributeWinnings(market, date, session, result) {
@@ -1712,15 +1790,96 @@ function distributeWinnings(market, date, session, result) {
   render();
 }
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+function bidExportTimestamp(bet) {
+  const candidates = [bet.createdAt, bet.date];
+  for (const value of candidates) {
+    const raw = String(value || "");
+    const iso = Date.parse(raw);
+    if (!Number.isNaN(iso)) return new Date(iso);
+    const legacyMatch = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(.+))?$/);
+    if (legacyMatch) {
+      const time = legacyMatch[4] || "00:00:00";
+      const parsed = new Date(`${legacyMatch[3]}-${legacyMatch[2]}-${legacyMatch[1]}T${time}`);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
+  return null;
+}
+
+function bidSettlementDetails(bet) {
+  const market = data.markets.find((item) => item.name.trim().toLowerCase() === String(bet.market || "").trim().toLowerCase());
+  const date = resultDateForBid(bet);
+  if (!market || !date) return { outcome: "Pending", result: "", rate: "", winnings: "" };
+  const type = canonicalGameType(bet.type);
+  const settlingSession = ["Half Sangam", "Full Sangam"].includes(type) ? "Close" : String(bet.session || "Open");
+  const published = (market.results || []).find((item) => item.date === date && item.session === settlingSession)
+    || (date === localDateKey() && market.result && market.result !== "—" ? { result: market.result } : null);
+  if (!published?.result) return { outcome: "Pending", result: "", rate: "", winnings: "" };
+  if (!type) return { outcome: "Result posted", result: published.result, rate: "", winnings: "" };
+  const selection = winningSelection(bet, market, published.result, settlingSession);
+  if (!selection) return { outcome: "Loss", result: published.result, rate: "", winnings: "0" };
+  const rate = Number(data.rates.find((item) => canonicalGameType(item.id) === type)?.value);
+  if (!Number.isFinite(rate)) return { outcome: "Won · rate unavailable", result: published.result, rate: "", winnings: "" };
+  return { outcome: "Win", result: published.result, rate, winnings: Number(bet.points) * rate };
+}
+
+function downloadBidExport(range) {
+  const now = new Date();
+  const start = range === "today"
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    : range === "week" ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6) : null;
+  const rows = data.bets
+    .map((bet) => ({ bet, timestamp: bidExportTimestamp(bet) }))
+    .filter(({ timestamp }) => !start || (timestamp && timestamp >= start && timestamp <= now))
+    .sort((left, right) => (right.timestamp?.getTime() || 0) - (left.timestamp?.getTime() || 0));
+  if (!rows.length) {
+    toast("No bids are available for this export period.", true);
+    return false;
+  }
+  const columns = [
+    ["Player", (bet) => bet.player || data.players.find((player) => player.id === bet.playerId || player.mobile === bet.mobile)?.name || ""],
+    ["Phone", (bet) => bet.mobile || data.players.find((player) => player.id === bet.playerId)?.mobile || bet.playerId || ""],
+    ["Market", (bet) => bet.market],
+    ["Session", (bet) => bet.session],
+    ["Game", (bet) => bet.type],
+    ["Bid number", (bet) => bet.number],
+    ["Points", (bet) => bet.points],
+    ["Bid time", (bet, timestamp) => timestamp ? timestamp.toLocaleString("en-IN") : bet.date || ""],
+    ["Outcome", (bet, timestamp, details) => details.outcome],
+    ["Market result", (bet, timestamp, details) => details.result],
+    ["Rate", (bet, timestamp, details) => details.rate],
+    ["Winning amount", (bet, timestamp, details) => details.winnings],
+  ];
+  const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const csv = [
+    columns.map(([label]) => quote(label)).join(","),
+    ...rows.map(({ bet, timestamp }) => {
+      const details = bidSettlementDetails(bet);
+      return columns.map(([, value]) => quote(value(bet, timestamp, details))).join(",");
+    }),
+  ].join("\r\n");
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `kalyan-gold-admin-${new Date().toLocaleDateString("en-CA")}.json`;
+  const suffix = range === "today" ? "today" : range === "week" ? "last-7-days" : "all";
+  anchor.download = `kalyan-gold-bids-${suffix}-${localDateKey()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
-  toast("Data backup downloaded.");
+  toast(`${rows.length} bid${rows.length === 1 ? "" : "s"} exported with player and result details.`);
+  return true;
+}
+
+function exportData() {
+  modal("Export bid history", `<p class="hint">Export only the key bid and player details, including bid time and available win/loss results.</p><div class="export-options">
+    <label><input type="radio" name="export-range" value="today" checked><span><strong>Today's bids</strong><small>All bids placed today</small></span></label>
+    <label><input type="radio" name="export-range" value="week"><span><strong>Last 7 days</strong><small>Bids placed during the past week</small></span></label>
+    <label><input type="radio" name="export-range" value="all"><span><strong>All bid history</strong><small>Every available bid and player record</small></span></label>
+  </div>`, (form) => {
+    const range = String(form.get("export-range") || "today");
+    if (range === "all" && !window.confirm("Export all available bid and player details?")) return false;
+    return downloadBidExport(range);
+  }, { submitLabel: "Export CSV" });
 }
 
 function importData() {
@@ -1753,14 +1912,163 @@ function requestManualPayment() {
 }
 
 function publishBroadcast() {
-  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Push notifications are not configured.</div></div></div>`, (form) => {
-    data.settings.noticeTitle = String(form.get("title")).trim();
-    data.settings.noticeMessage = String(form.get("message")).trim();
-    persist("Broadcast message saved. Push delivery is not configured.");
+  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Sends a push notification to all subscribed users.</div></div></div>`, async (form) => {
+    const heading = String(form.get("title") || "").trim();
+    const message = String(form.get("message") || "").trim();
+    if (!heading || !message) {
+      toast("Enter a broadcast title and message.", true);
+      return false;
+    }
+    data.settings.noticeTitle = heading;
+    data.settings.noticeMessage = message;
+    persist("Broadcast notice saved.");
+    const saved = await lastPersistPromise;
+    if (!saved) return false;
+    render();
+    await sendPushBroadcast(heading, message);
+    return true;
+  }, { submitLabel: "Save & send" });
+}
+
+function configureBroadcastSender() {
+  let endpoint = "";
+  try {
+    endpoint = localStorage.getItem(BROADCAST_ENDPOINT_KEY) || "";
+  } catch (error) {
+    toast(`Could not read sender settings: ${error.message}`, true);
+    return;
+  }
+  modal("Configure Google Apps Script", `<p class="hint">Paste the deployed Apps Script web app URL and its BROADCAST_TOKEN. The token is kept only for this admin session.</p><div class="form-grid"><div class="form-field full"><label>Apps Script web app URL</label><input class="field" name="endpoint" type="url" value="${escapeHtml(endpoint)}" placeholder="https://script.google.com/macros/s/.../exec" required></div><div class="form-field full"><label>Broadcast token</label><input class="field" name="token" type="password" minlength="24" maxlength="200" autocomplete="new-password" required></div></div>`, (form) => {
+    const url = new URL(String(form.get("endpoint") || "").trim());
+    const token = String(form.get("token") || "").trim();
+    if (url.protocol !== "https:" || url.hostname !== "script.google.com"
+      || !/^\/macros\/s\/[^/]+\/exec$/.test(url.pathname) || url.search || url.hash) {
+      toast("Enter the HTTPS /exec deployment URL from Google Apps Script.", true);
+      return false;
+    }
+    if (token.length < 24) {
+      toast("The broadcast token must contain at least 24 characters.", true);
+      return false;
+    }
+    try {
+      localStorage.setItem(BROADCAST_ENDPOINT_KEY, url.href);
+      sessionStorage.setItem(BROADCAST_TOKEN_KEY, token);
+    } catch (error) {
+      toast(`Could not save sender settings: ${error.message}`, true);
+      return false;
+    }
+    toast("Google Apps Script sender configured for this session.");
     render();
     return true;
-  }, { submitLabel: "Save notice" });
+  }, { submitLabel: "Save sender" });
 }
+
+function sendPushBroadcast(heading, message) {
+  let endpoint;
+  let token;
+  try {
+    endpoint = localStorage.getItem(BROADCAST_ENDPOINT_KEY) || "";
+    token = sessionStorage.getItem(BROADCAST_TOKEN_KEY) || "";
+  } catch (error) {
+    toast(`Could not read sender settings: ${error.message}`, true);
+    return Promise.resolve(false);
+  }
+  if (!endpoint || !token) {
+    toast("Configure the Google Apps Script sender before sending notifications.", true);
+    return Promise.resolve(false);
+  }
+  if (!/^https:\/\/[^/]+\/macros\/s\/[^/]+\/exec$/.test(endpoint)) {
+    toast("The configured Google Apps Script URL is invalid. Configure it again.", true);
+    return Promise.resolve(false);
+  }
+  let imageUrl;
+  try {
+    imageUrl = new URL("logo.png", window.location.href);
+  } catch (error) {
+    toast(`Could not resolve the notification logo URL: ${error.message}`, true);
+    return Promise.resolve(false);
+  }
+  if (imageUrl.protocol !== "https:") {
+    toast("Push notifications require the deployed site logo to have a public HTTPS URL.", true);
+    return Promise.resolve(false);
+  }
+
+  if (!window.crypto?.getRandomValues) {
+    toast("Secure random values are unavailable. Open the admin over HTTPS and try again.", true);
+    return Promise.resolve(false);
+  }
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  const nonce = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const frameName = `kalyan-broadcast-${nonce}`;
+  const iframe = document.createElement("iframe");
+  iframe.name = frameName;
+  iframe.hidden = true;
+  iframe.setAttribute("aria-hidden", "true");
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = endpoint;
+  form.target = frameName;
+  form.hidden = true;
+  const values = { nonce, token, heading, message, imageUrl: imageUrl.href };
+  for (const [name, value] of Object.entries(values)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.append(input);
+  }
+  document.body.append(iframe, form);
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      pendingBroadcasts.delete(nonce);
+      iframe.remove();
+      form.remove();
+      toast("No response from Google Apps Script. Check deployment access and try again.", true);
+      resolve(false);
+    }, 45_000);
+    pendingBroadcasts.set(nonce, {
+      complete(response) {
+        window.clearTimeout(timeout);
+        pendingBroadcasts.delete(nonce);
+        iframe.remove();
+        form.remove();
+        if (!response.ok) {
+          toast(`Push notification failed: ${response.message}`, true);
+          resolve(false);
+          return;
+        }
+        toast(`${response.message} ${response.recipients} recipient(s).`);
+        resolve(true);
+      },
+    });
+    try {
+      form.submit();
+    } catch (error) {
+      window.clearTimeout(timeout);
+      pendingBroadcasts.delete(nonce);
+      iframe.remove();
+      form.remove();
+      toast(`Could not contact Google Apps Script: ${error.message}`, true);
+      resolve(false);
+    }
+  });
+}
+
+window.addEventListener("message", (event) => {
+  const response = event.data;
+  if (!response || response.source !== "kalyan-gold-gas" || typeof response.nonce !== "string") return;
+  let responseHost = "";
+  try {
+    responseHost = new URL(event.origin).hostname;
+  } catch (error) {
+    return;
+  }
+  if (responseHost !== "script.google.com" && !responseHost.endsWith(".googleusercontent.com")) return;
+  const pending = pendingBroadcasts.get(response.nonce);
+  if (!pending) return;
+  pending.complete(response);
+});
 
 document.addEventListener("click", (event) => {
   const pageTarget = event.target.closest("[data-page]");
@@ -1789,6 +2097,11 @@ document.addEventListener("click", (event) => {
       break;
     case "dismiss-notice": control.closest(".notice-strip").remove(); break;
     case "export": exportData(); break;
+    case "filter-market":
+      playedMarketFilter = control.dataset.market || "All";
+      playedPlayerFilter = "All";
+      render();
+      break;
     case "import-data": importData(); break;
     case "profile": goTo("profile"); break;
     case "go-dashboard": goTo("dashboard"); break;
@@ -1948,6 +2261,7 @@ document.addEventListener("click", (event) => {
       }
       break;
     case "broadcast": publishBroadcast(); break;
+    case "configure-broadcast": configureBroadcastSender(); break;
     case "close-modal": document.getElementById("modal-root").innerHTML = ""; break;
     default: break;
   }
@@ -1977,6 +2291,8 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
   errorElement.textContent = "";
   try {
     await verifyAdminLogin(phone, password);
+    localStorage.setItem(ADMIN_SESSION_KEY, "verified");
+    establishAdminHistory();
     setAdminAppVisible(true);
     document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
     setConnectionStatus("Connecting…", "Live updates", "connecting");
@@ -1989,6 +2305,24 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
     submitButton.disabled = false;
     submitButton.querySelector("span").textContent = "Sign in";
   }
+});
+
+window.addEventListener("popstate", (event) => {
+  if (!adminAuthenticated) return;
+  if (event.state?.adminBackstop) {
+    history.pushState({ adminPage: currentPage }, "", location.href);
+    render();
+    return;
+  }
+  const page = event.state?.adminPage;
+  if (page && pageRenderers[page]) {
+    currentPage = page;
+    render();
+    return;
+  }
+  history.pushState({ adminPage: currentPage }, "", location.href);
+  currentPage = "dashboard";
+  render();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -2030,6 +2364,17 @@ document.addEventListener("input", (event) => {
     const replacement = document.getElementById("played-search");
     replacement.focus();
     replacement.setSelectionRange(selectionStart, selectionStart);
+  }
+  if (event.target.id === "player-history-search") {
+    playerHistorySearch = event.target.value;
+    const query = playerHistorySearch.trim().toLowerCase();
+    const rawDigits = query.replace(/\D/g, "");
+    const queryDigits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits;
+    const match = data.players.find((item) => !query
+      || `${item.name} ${item.mobile}`.toLowerCase().includes(query)
+      || (queryDigits.length > 0 && String(item.mobile).replace(/\D/g, "").includes(queryDigits)));
+    if (match) selectedPlayerId = match.id;
+    render(true);
   }
   if (event.target.id === "result-panel") {
     resultPanelDraft = event.target.value.replace(/\D/g, "").slice(0, 3);
@@ -2073,6 +2418,10 @@ document.addEventListener("change", (event) => {
   }
   if (event.target.id === "played-player-filter") {
     playedPlayerFilter = event.target.value;
+    render();
+  }
+  if (event.target.id === "played-market-filter") {
+    playedMarketFilter = event.target.value;
     render();
   }
   if (event.target.dataset.setting) {
@@ -2179,8 +2528,14 @@ document.addEventListener("submit", (event) => {
     resultSessionSelection = session;
     resultDateSelection = date;
     resultPanelDraft = panel;
-    saveResult(market, session, date, result);
+    const resultChanged = saveResult(market, session, date, result);
     persist(`Result saved: ${result}. Review the winners before distributing.`);
+    void lastPersistPromise.then((saved) => {
+      if (saved && resultChanged) {
+        return sendPushBroadcast(market.name, `${session} result: ${result} · ${date}`);
+      }
+      return false;
+    });
     render();
   }
   if (event.target.id === "rates-form") {
@@ -2202,14 +2557,22 @@ document.addEventListener("submit", (event) => {
     const form = new FormData(event.target);
     const signUpBonus = Number(form.get("signUpBonus"));
     const minimumWithdrawal = Number(form.get("minimumWithdrawal"));
+    const minimumEntry = Number(form.get("minimumEntry"));
+    const maximumEntry = Number(form.get("maximumEntry"));
     if (!Number.isFinite(signUpBonus) || signUpBonus < 0 ||
-        !Number.isFinite(minimumWithdrawal) || minimumWithdrawal < 0) {
-      toast("Signup bonus and minimum withdrawal must be valid non-negative amounts.", true);
+        !Number.isFinite(minimumWithdrawal) || minimumWithdrawal < 0 ||
+        !Number.isFinite(minimumEntry) || minimumEntry < 0 ||
+        !Number.isFinite(maximumEntry) || maximumEntry < 0 ||
+        (maximumEntry > 0 && minimumEntry > maximumEntry)) {
+      toast("Enter valid non-negative settings. A non-zero maximum bid must be at least the minimum bid.", true);
       return;
     }
     Object.assign(data.settings, {
       signUpBonus,
       minimumWithdrawal,
+      minimumEntry,
+      maximumEntry,
+      withdrawTiming: String(form.get("withdrawTiming") || "").trim(),
       websiteUrl: String(form.get("websiteUrl") || "").trim(),
       resultChartUrl: String(form.get("resultChartUrl") || "").trim(),
       contactUrl: String(form.get("contactUrl") || "").trim(),
@@ -2222,14 +2585,25 @@ document.addEventListener("submit", (event) => {
   if (event.target.id === "notice-form") {
     event.preventDefault();
     const form = new FormData(event.target);
-    data.settings.noticeTitle = String(form.get("title")).trim();
-    data.settings.noticeMessage = String(form.get("message")).trim();
+    const noticeTitle = String(form.get("title") || "").trim();
+    const noticeMessage = String(form.get("message") || "").trim();
+    if (!noticeTitle || !noticeMessage) {
+      toast("Enter a notice title and message.", true);
+      return;
+    }
+    data.settings.noticeTitle = noticeTitle;
+    data.settings.noticeMessage = noticeMessage;
     persist("Player notice saved.");
+    void lastPersistPromise.then((saved) => {
+      if (saved) return sendPushBroadcast(noticeTitle, noticeMessage);
+      return false;
+    });
     render();
   }
 });
 
 function startRealtimeSync() {
+  if (!adminAuthenticated) return;
   if (typeof firebase === "undefined") {
     setConnectionStatus("Connection unavailable", "Check your internet connection", "error");
     document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Could not connect. Check your internet connection and reload this page.</div>`;
@@ -2281,4 +2655,13 @@ function startRealtimeSync() {
     document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Could not connect to admin data.<br><small>${escapeHtml(error.message)}</small></div>`;
     toast(`Could not connect: ${error.message}`, true);
   }
+}
+
+if (localStorage.getItem(ADMIN_SESSION_KEY) === "verified") {
+  setAdminAppVisible(true);
+  document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  setConnectionStatus("Connecting…", "Live updates", "connecting");
+  document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Loading admin data…</div>`;
+  establishAdminHistory();
+  startRealtimeSync();
 }
