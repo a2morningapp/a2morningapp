@@ -33,8 +33,9 @@ function doPost(event) {
     }
 
     const properties = PropertiesService.getScriptProperties();
-    const expectedToken = properties.getProperty("BROADCAST_TOKEN") || "";
-    if (expectedToken.length < 24 || !constantTimeEquals(String(parameters.token || ""), expectedToken)) {
+    const expectedToken = String(properties.getProperty("BROADCAST_TOKEN") || "").trim();
+    const providedToken = String(parameters.token || "").trim();
+    if (expectedToken.length < 24 || !constantTimeEquals(providedToken, expectedToken)) {
       throw new Error("Sender authentication failed. Check the broadcast token.");
     }
     const appId = properties.getProperty("ONESIGNAL_APP_ID") || "";
