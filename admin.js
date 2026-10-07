@@ -11,6 +11,7 @@ const firebaseConfig = {
 const ADMIN_SESSION_KEY = "kalyanGoldAdminSession";
 const BROADCAST_ENDPOINT_KEY = "kalyanGoldBroadcastEndpoint";
 const BROADCAST_TOKEN_KEY = "kalyanGoldBroadcastToken";
+const BROADCAST_SENDER_VERSION = "2026-10-08-android-subscription-export-1";
 const pendingBroadcasts = new Map();
 
 const navigation = [
@@ -1993,18 +1994,6 @@ function sendPushBroadcast(heading, message) {
     return Promise.resolve(false);
   }
 
-  const externalIds = [...new Set(data.players
-    .map((player) => String(player.mobile || "").trim())
-    .filter((id) => /^\d{10,}$/.test(id)))];
-  if (!externalIds.length) {
-    toast("No player external IDs are available for the native OneSignal audience.", true);
-    return Promise.resolve(false);
-  }
-  if (externalIds.length > 20000) {
-    toast("The native audience exceeds OneSignal's 20,000-user per-message limit.", true);
-    return Promise.resolve(false);
-  }
-
   if (!window.crypto?.getRandomValues) {
     toast("Secure random values are unavailable. Open the admin over HTTPS and try again.", true);
     return Promise.resolve(false);
@@ -2022,14 +2011,7 @@ function sendPushBroadcast(heading, message) {
   form.action = endpoint;
   form.target = frameName;
   form.hidden = true;
-  const values = {
-    nonce,
-    token,
-    heading,
-    message,
-    imageUrl: imageUrl.href,
-    externalIds: JSON.stringify(externalIds),
-  };
+  const values = { nonce, token, heading, message, imageUrl: imageUrl.href };
   for (const [name, value] of Object.entries(values)) {
     const input = document.createElement("input");
     input.type = "hidden";
@@ -2101,6 +2083,13 @@ window.kalyanBroadcastStatus = (response) => {
   const pending = pendingBroadcasts.get(response.nonce);
   if (!pending) return;
   if (response.pending) return;
+  if (response.version !== BROADCAST_SENDER_VERSION) {
+    pending.complete({
+      ok: false,
+      message: "The Apps Script deployment is outdated. Open its /exec URL and verify version " + BROADCAST_SENDER_VERSION + ", then deploy a new version.",
+    });
+    return;
+  }
   if (typeof response.ok !== "boolean") {
     pending.complete({ ok: false, message: "Google Apps Script returned an invalid status." });
     return;
