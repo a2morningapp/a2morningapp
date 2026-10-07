@@ -270,7 +270,6 @@ function normalizeLegacyData(root) {
       id: mobile,
       name: String(decodeLegacyValue(player.name) || mobile),
       mobile,
-      pushSubscriptionId: String(decodeLegacyValue(player.push) || "").trim(),
       balance: numberFromLegacy(player.bal ?? player.COINS ?? player.B2),
       played: numberFromLegacy(player.TW ?? player.TD),
       balanceField: Object.prototype.hasOwnProperty.call(player, "bal") ? "bal"
@@ -1994,11 +1993,15 @@ function sendPushBroadcast(heading, message) {
     return Promise.resolve(false);
   }
 
-  const subscriptionIds = [...new Set(data.players
-    .map((player) => String(player.pushSubscriptionId || "").trim())
-    .filter((id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))];
-  if (!subscriptionIds.length) {
-    toast("No native OneSignal subscription IDs are saved for players yet. Open the native app after allowing notifications so it can register each subscription.", true);
+  const externalIds = [...new Set(data.players
+    .map((player) => String(player.mobile || "").trim())
+    .filter((id) => /^\d{10,}$/.test(id)))];
+  if (!externalIds.length) {
+    toast("No player external IDs are available for the native OneSignal audience.", true);
+    return Promise.resolve(false);
+  }
+  if (externalIds.length > 20000) {
+    toast("The native audience exceeds OneSignal's 20,000-user per-message limit.", true);
     return Promise.resolve(false);
   }
 
@@ -2025,7 +2028,7 @@ function sendPushBroadcast(heading, message) {
     heading,
     message,
     imageUrl: imageUrl.href,
-    subscriptionIds: JSON.stringify(subscriptionIds),
+    externalIds: JSON.stringify(externalIds),
   };
   for (const [name, value] of Object.entries(values)) {
     const input = document.createElement("input");
