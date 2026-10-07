@@ -270,6 +270,7 @@ function normalizeLegacyData(root) {
       id: mobile,
       name: String(decodeLegacyValue(player.name) || mobile),
       mobile,
+      pushSubscriptionId: String(decodeLegacyValue(player.push) || "").trim(),
       balance: numberFromLegacy(player.bal ?? player.COINS ?? player.B2),
       played: numberFromLegacy(player.TW ?? player.TD),
       balanceField: Object.prototype.hasOwnProperty.call(player, "bal") ? "bal"
@@ -1993,6 +1994,14 @@ function sendPushBroadcast(heading, message) {
     return Promise.resolve(false);
   }
 
+  const subscriptionIds = [...new Set(data.players
+    .map((player) => String(player.pushSubscriptionId || "").trim())
+    .filter((id) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))];
+  if (!subscriptionIds.length) {
+    toast("No native OneSignal subscription IDs are saved for players yet. Open the native app after allowing notifications so it can register each subscription.", true);
+    return Promise.resolve(false);
+  }
+
   if (!window.crypto?.getRandomValues) {
     toast("Secure random values are unavailable. Open the admin over HTTPS and try again.", true);
     return Promise.resolve(false);
@@ -2010,7 +2019,14 @@ function sendPushBroadcast(heading, message) {
   form.action = endpoint;
   form.target = frameName;
   form.hidden = true;
-  const values = { nonce, token, heading, message, imageUrl: imageUrl.href };
+  const values = {
+    nonce,
+    token,
+    heading,
+    message,
+    imageUrl: imageUrl.href,
+    subscriptionIds: JSON.stringify(subscriptionIds),
+  };
   for (const [name, value] of Object.entries(values)) {
     const input = document.createElement("input");
     input.type = "hidden";
