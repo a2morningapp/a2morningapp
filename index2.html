@@ -71,9 +71,6 @@
       <input id="phone" type="tel" inputmode="numeric" autocomplete="tel"
         pattern="[6-9][0-9]{9}" maxlength="10" required>
 
-      <label for="return-url">Return URL (not a webhook)</label>
-      <input id="return-url" type="url" placeholder="This payment page (recommended)">
-
       <button id="create-order" type="submit">Create ₹1 payment</button>
     </form>
 
@@ -86,7 +83,8 @@
     </p>
     <p class="note">
       The supplied integration guide documents a return URL and status polling, not a webhook.
-      A webhook must be a server endpoint that accepts gateway callbacks; this page URL is not one.
+      The return URL is set automatically to this page on the same HTTPS domain; it is not a webhook.
+      A webhook must be a separate server endpoint that accepts gateway callbacks.
       Upload both this page and <code>gateway-proxy.php</code> to the same HTTPS folder. The PHP proxy
       calls the gateway server-to-server, so browser CORS restrictions do not block the API response.
     </p>
@@ -96,7 +94,6 @@
     const form = document.querySelector("#payment-form");
     const amountInput = document.querySelector("#amount");
     const phoneInput = document.querySelector("#phone");
-    const returnUrlInput = document.querySelector("#return-url");
     const createButton = document.querySelector("#create-order");
     const checkButton = document.querySelector("#check-status");
     const checkoutLink = document.querySelector("#checkout-link");
@@ -164,6 +161,13 @@
       try {
         data = JSON.parse(responseText);
       } catch {
+        if (response.status === 405) {
+          throw new Error(
+            "HTTP 405 from the website server: it did not accept the POST to gateway-proxy.php. " +
+            "Upload the latest gateway-proxy.php beside index2.html, enable PHP on Hostinger, " +
+            "and open the page on HTTPS. This is not a payment-declined response."
+          );
+        }
         throw new Error(`Gateway returned a non-JSON response (HTTP ${response.status}).`);
       }
       if (!response.ok) {
@@ -194,10 +198,10 @@
         throw new Error("Enter an amount from ₹1 to ₹10,00,000.");
       }
       const orderId = makeOrderId();
-      const returnUrl = new URL(returnUrlInput.value.trim() || location.href, location.href);
-      if (!validHttpsUrl(returnUrl.href) || returnUrl.origin !== location.origin) {
-        throw new Error("Return URL must be an HTTPS page on this same website.");
+      if (!validHttpsUrl(location.href)) {
+        throw new Error("Open this payment page using its HTTPS website address, not a local file or HTTP preview.");
       }
+      const returnUrl = new URL(location.href);
       returnUrl.searchParams.set("orderId", orderId);
       const popup = window.open("about:blank", "_blank");
       requestInFlight = true;
