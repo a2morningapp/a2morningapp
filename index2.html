@@ -2,592 +2,116 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f3f6fa">
-  <title>Gateway payment demo</title>
-  <style>
-    :root {
-      color-scheme: light;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #192d4b;
-      background: #f3f6fa;
-      font-synthesis: none;
-      text-rendering: optimizeLegibility;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      min-width: 320px;
-      min-height: 100vh;
-      margin: 0;
-      padding: 40px 20px;
-      background:
-        radial-gradient(ellipse at 50% -20%, rgba(57, 144, 215, .11), transparent 56%),
-        #f3f6fa;
-    }
-
-    main {
-      width: min(100%, 600px);
-      margin: 0 auto;
-      padding: 30px;
-      border: 1px solid #e3e9f0;
-      border-radius: 18px;
-      background: #fff;
-      box-shadow: 0 16px 44px rgba(26, 48, 78, .08);
-    }
-
-    .eyebrow {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      margin: 0 0 10px;
-      color: #3987c6;
-      font-size: 12px;
-      font-weight: 750;
-      letter-spacing: .09em;
-      text-transform: uppercase;
-    }
-
-    .lock {
-      display: inline-grid;
-      width: 21px;
-      height: 21px;
-      place-items: center;
-      border-radius: 7px;
-      background: #eaf4fc;
-      font-size: 13px;
-      letter-spacing: 0;
-    }
-
-    h1 {
-      margin: 0;
-      color: #192d4b;
-      font-size: clamp(25px, 5vw, 32px);
-      letter-spacing: -.035em;
-    }
-
-    .intro {
-      margin: 9px 0 25px;
-      color: #607086;
-      font-size: 15px;
-      line-height: 1.6;
-    }
-
-    .gateway {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 24px;
-      padding: 13px 15px;
-      border: 1px solid #e5edf4;
-      border-radius: 11px;
-      background: #f8fafc;
-    }
-
-    .gateway-label {
-      display: block;
-      margin-bottom: 3px;
-      color: #738197;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-    }
-
-    .gateway-url {
-      color: #334a67;
-      font-size: 13px;
-      font-weight: 600;
-      overflow-wrap: anywhere;
-    }
-
-    .secure {
-      flex: none;
-      color: #247848;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    form { display: grid; gap: 17px; }
-
-    label {
-      display: block;
-      margin-bottom: 7px;
-      color: #30435d;
-      font-size: 13px;
-      font-weight: 650;
-    }
-
-    input {
-      width: 100%;
-      min-height: 48px;
-      padding: 12px 14px;
-      border: 1px solid #ccd6e1;
-      border-radius: 9px;
-      outline: none;
-      background: #fff;
-      color: #192d4b;
-      font: inherit;
-      font-size: 15px;
-      transition: border-color .15s, box-shadow .15s;
-    }
-
-    input:focus {
-      border-color: #398fd1;
-      box-shadow: 0 0 0 3px rgba(57, 143, 209, .15);
-    }
-
-    .hint {
-      margin: 6px 0 0;
-      color: #7b8797;
-      font-size: 12px;
-    }
-
-    button, .checkout-link {
-      display: inline-flex;
-      min-height: 48px;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      border: 0;
-      border-radius: 9px;
-      background: #348fd0;
-      color: #fff;
-      font: inherit;
-      font-size: 15px;
-      font-weight: 700;
-      text-align: center;
-      text-decoration: none;
-      cursor: pointer;
-      transition: background .15s, transform .15s, opacity .15s;
-    }
-
-    button:hover:not(:disabled), .checkout-link:hover { background: #247bb9; }
-    button:active:not(:disabled) { transform: translateY(1px); }
-    button:disabled { opacity: .62; cursor: wait; }
-
-    .primary { width: 100%; margin-top: 3px; }
-
-    .order-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 13px;
-    }
-
-    .order-actions button, .order-actions a { min-height: 44px; font-size: 13px; }
-
-    .secondary {
-      border: 1px solid #d5e0ea;
-      background: #fff;
-      color: #344b68;
-    }
-
-    .secondary:hover:not(:disabled) { background: #f5f8fb; }
-
-    .checkout-link[hidden], .order-actions[hidden] { display: none; }
-
-    .status {
-      margin-top: 20px;
-      padding: 13px 14px;
-      border: 1px solid #e3e9f0;
-      border-radius: 10px;
-      background: #f8fafc;
-      color: #4c5f76;
-      font-size: 13px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .status[data-kind="success"] {
-      border-color: #bde4cb;
-      background: #f0faf3;
-      color: #24623c;
-    }
-
-    .status[data-kind="error"] {
-      border-color: #f1c8c8;
-      background: #fff6f5;
-      color: #8b3434;
-    }
-
-    .status[data-kind="pending"] {
-      border-color: #c5dbee;
-      background: #f1f8fd;
-      color: #315f82;
-    }
-
-    .notice {
-      margin: 19px 0 0;
-      color: #6c7888;
-      font-size: 12px;
-      line-height: 1.6;
-    }
-
-    .notice strong { color: #44546a; }
-
-    @media (max-width: 520px) {
-      body { padding: 18px 12px; }
-      main { padding: 23px 19px; border-radius: 14px; }
-      .order-actions { grid-template-columns: 1fr; }
-      .gateway { align-items: flex-start; flex-direction: column; }
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#063759">
+  <title>Kalyan Gold | Matka</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
-  <main>
-    <p class="eyebrow"><span class="lock" aria-hidden="true">✓</span> Secure checkout</p>
-    <h1>Gateway payment demo</h1>
-    <p class="intro">Create a payment order, complete it on the gateway, then check its status here.</p>
-
-    <section class="gateway" aria-label="Gateway connection">
-      <div>
-        <span class="gateway-label">Connected payment gateway</span>
-        <span class="gateway-url">payment.happysatta.com</span>
+  <main id="auth-view" class="auth-shell">
+    <section class="auth-brand">
+      <a class="brand-lockup" href="#" aria-label="Kalyan Gold home">
+        <img src="logo.svg" alt="" class="brand-logo">
+        <span><strong>KALYAN</strong><small>GOLD</small></span>
+      </a>
+      <div class="brand-copy">
+        <p class="eyebrow">WELCOME TO KALYAN GOLD</p>
+        <h1>Your games.<br><span>Your numbers.</span></h1>
+        <p>One place for market updates, game charts and your points activity.</p>
       </div>
-      <span class="secure">Token protected</span>
+      <div class="brand-foot"><span class="live-dot"></span> Your matka dashboard, reimagined</div>
     </section>
-
-    <form id="payment-form" novalidate>
-      <div>
-        <label for="amount">Amount (INR)</label>
-        <input id="amount" name="amount" type="number" inputmode="decimal" min="1" max="1000000" step="0.01" value="1.00" required>
-        <p class="hint">Minimum ₹1.00. A payment can debit real money.</p>
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand">
+          <img src="logo.svg" alt="" class="brand-logo">
+          <strong>KALYAN <span>GOLD</span></strong>
+        </div>
+        <p class="eyebrow" id="auth-eyebrow">YOUR ACCOUNT</p>
+        <h2 id="auth-title">Welcome back</h2>
+        <p class="muted" id="auth-subtitle">Sign in with your phone number and password.</p>
+        <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <button class="auth-tab" type="button" data-auth-mode="login">Sign in</button>
+          <button class="auth-tab active" type="button" data-auth-mode="signup">Create account</button>
+        </div>
+        <form id="auth-form" class="form-stack">
+          <label id="name-field" class="field">Full name
+            <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="60" placeholder="Enter your name">
+          </label>
+          <label class="field">Phone number
+            <span class="input-wrap"><span class="input-prefix">+91</span><input id="auth-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit mobile number" required></span>
+          </label>
+          <label class="field">Password
+            <input id="auth-password" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+          </label>
+          <button class="auth-forgot-link hidden" id="forgot-password-button" type="button" data-action="forgot-password">Forgot password?</button>
+          <button class="button button-primary button-wide" id="auth-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
+        </form>
       </div>
-      <div>
-        <label for="mobile">Payer's 10-digit mobile number</label>
-        <input id="mobile" name="mobile" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" pattern="[6-9][0-9]{9}" placeholder="Enter mobile number" required>
-      </div>
-      <div>
-        <label for="api-token">Gateway API token</label>
-        <input id="api-token" name="api-token" type="password" autocomplete="off" placeholder="Enter your gateway API token" required>
-        <p class="hint">Entered for this session only. The token is sent directly to the gateway and is visible to this browser.</p>
-      </div>
-      <button class="primary" id="create-button" type="submit">Create ₹1 payment</button>
-    </form>
-
-    <div class="order-actions" id="order-actions" hidden>
-      <a class="checkout-link" id="checkout-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Open checkout</a>
-      <button class="secondary" id="check-button" type="button">Check payment status</button>
-    </div>
-
-    <div class="status" id="status" role="status" aria-live="polite">Enter the payer mobile number and gateway API token to start.</div>
-
-    <p class="notice"><strong>Payment safety:</strong> Do not use a production token in a public website. This page calls the gateway directly; requests work only if the gateway allows browser CORS for your website domain. A return URL is not a webhook.</p>
+    </section>
+    <button class="auth-whatsapp-button hidden" id="auth-whatsapp-button" type="button" data-action="auth-whatsapp" aria-label="Chat with us on WhatsApp" title="Chat with us on WhatsApp"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5a12 12 0 0 0-10.3 18.2L4 28l6.5-1.7A12 12 0 1 0 16 3.5Z"/><path d="M12.2 10.5c-.4-.8-.8-.8-1.2-.8h-.9c-.3 0-.8.1-1.2.6s-1.6 1.6-1.6 3.8 1.6 4.4 1.8 4.7 3.1 5 7.5 6.8c3.7 1.5 4.5 1.2 5.3 1.1s2.5-1 2.9-2 .4-1.9.3-2.1-.4-.3-.9-.6l-3-1.5c-.4-.2-.7-.3-1 .2s-1.1 1.5-1.4 1.8-.5.3-1 .1a12.7 12.7 0 0 1-3.7-2.3 13.8 13.8 0 0 1-2.5-3.1c-.3-.5 0-.7.2-.9l.7-.8c.2-.3.3-.5.5-.8s.1-.6 0-.8l-1.2-3.4Z"/></svg></button>
   </main>
 
-  <script>
-    (() => {
-      "use strict";
+  <div id="app-view" class="app-shell hidden">
+    <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close navigation"></button>
+    <aside class="sidebar" id="sidebar">
+      <a class="sidebar-brand" href="#" data-page="home">
+        <img src="logo.svg" alt="" class="brand-logo">
+        <span><strong>Kalyan Gold</strong><small>MATKA</small></span>
+      </a>
+      <nav class="side-nav" aria-label="Main navigation">
+        <div class="nav-caption">MENU</div>
+        <button class="nav-link active" type="button" data-page="home"><span class="nav-icon" aria-hidden="true">🏠</span>Home</button>
+        <button class="nav-link" type="button" data-page="profile"><span class="nav-icon" aria-hidden="true">👤</span>My Profile</button>
+        <button class="nav-link" type="button" data-page="bids"><span class="nav-icon" aria-hidden="true">▧</span>Bids History</button>
+        <button class="nav-link" type="button" data-page="points"><span class="nav-icon" aria-hidden="true">◈</span>Points History</button>
+        <button class="nav-link" type="button" data-page="deposit"><span class="nav-icon" aria-hidden="true">＋</span>Deposit Points</button>
+        <button class="nav-link" type="button" data-page="withdraw"><span class="nav-icon" aria-hidden="true">↗</span>Withdraw Points</button>
+        <div class="nav-caption nav-caption-spaced">MORE</div>
+        <button class="nav-link" type="button" data-page="notices"><span class="nav-icon" aria-hidden="true">📢</span>Emergency Notice</button>
+        <button class="nav-link" type="button" data-page="rates"><span class="nav-icon" aria-hidden="true">🏷️</span>Market Rates</button>
+        <button class="nav-link" type="button" data-action="share-app"><span class="nav-icon" aria-hidden="true">🔗</span>Share Our App</button>
+        <button class="nav-link" type="button" data-action="change-password"><span class="nav-icon" aria-hidden="true">🔑</span>Change Password</button>
+        <button class="nav-link" type="button" data-page="policy"><span class="nav-icon" aria-hidden="true">⚠️</span>Privacy &amp; Policy</button>
+        <button class="nav-link" type="button" data-action="open-results-website"><span class="nav-icon" aria-hidden="true">🌐</span>Website</button>
+        <button class="nav-link nav-link-logout" id="logout-button" type="button"><span class="nav-icon" aria-hidden="true">⚡</span>Log Out</button>
+        <button class="nav-link nav-link-howto" type="button" data-page="howto"><span class="nav-icon" aria-hidden="true">▶️</span>How to Play</button>
+        <div class="nav-caption nav-caption-spaced">ACCOUNT ACTIVITY</div>
+        <button class="nav-link" type="button" data-page="markets"><span class="nav-icon" aria-hidden="true">▦</span>Games &amp; Markets</button>
+      </nav>
+    </aside>
 
-      const GATEWAY_API = "https://payment.happysatta.com/api";
-      const STORAGE_KEY = "gateway-payment-demo.active-order";
-      const POLL_INTERVAL_MS = 5000;
-      const MAX_POLL_DURATION_MS = 30 * 60 * 1000;
-      const TERMINAL_STATUSES = new Set(["COMPLETED", "FAILED", "FAILURE", "CANCELLED", "CANCELED"]);
-      const form = document.getElementById("payment-form");
-      const amountInput = document.getElementById("amount");
-      const mobileInput = document.getElementById("mobile");
-      const tokenInput = document.getElementById("api-token");
-      const createButton = document.getElementById("create-button");
-      const checkButton = document.getElementById("check-button");
-      const orderActions = document.getElementById("order-actions");
-      const checkoutLink = document.getElementById("checkout-link");
-      const statusBox = document.getElementById("status");
-      const isSecureOrigin = window.location.protocol === "https:";
-
-      let activeOrder = null;
-      let polling = false;
-      let checking = false;
-      let pollTimer = null;
-      let checkoutTab = null;
-
-      function setStatus(message, kind = "") {
-        statusBox.textContent = message;
-        statusBox.dataset.kind = kind;
-      }
-
-      function formatAmount(value) {
-        const amount = Number(value);
-        return Number.isFinite(amount)
-          ? new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(amount)
-          : "1";
-      }
-
-      function updateCreateLabel() {
-        createButton.textContent = `Create ₹${formatAmount(amountInput.value)} payment`;
-      }
-
-      function saveActiveOrder() {
-        try {
-          if (activeOrder) {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(activeOrder));
-          } else {
-            sessionStorage.removeItem(STORAGE_KEY);
-          }
-        } catch {
-          setStatus("Your browser could not save this order for a page reload. Keep this tab open to check its status.", "error");
-        }
-      }
-
-      function restoreActiveOrder() {
-        try {
-          const saved = sessionStorage.getItem(STORAGE_KEY);
-          if (!saved) return;
-          const order = JSON.parse(saved);
-          if (typeof order.orderId === "string" && /^\d{10,32}$/.test(order.orderId)) {
-            activeOrder = order;
-            orderActions.hidden = false;
-            checkButton.disabled = false;
-            if (typeof order.paymentUrl === "string") {
-              try {
-                const paymentUrl = new URL(order.paymentUrl);
-                if (paymentUrl.protocol === "https:" && !paymentUrl.username && !paymentUrl.password) {
-                  checkoutLink.href = paymentUrl.href;
-                  checkoutLink.hidden = false;
-                }
-              } catch {
-                checkoutLink.hidden = true;
-              }
-            }
-            setStatus(`Order ${order.orderId} is ready. Complete checkout or check its status.`, "pending");
-          } else {
-            sessionStorage.removeItem(STORAGE_KEY);
-          }
-        } catch {
-          setStatus("A saved order could not be restored. Create a new order to continue.", "error");
-        }
-      }
-
-      async function requestGateway(action, payload) {
-        if (!isSecureOrigin) {
-          throw new Error("Payment requests require the website to be hosted over HTTPS. Upload the files to an HTTPS web host before creating an order.");
-        }
-
-        let response;
-        const formData = new URLSearchParams();
-        formData.set("user_token", payload.userToken);
-        if (action === "create-order") {
-          formData.set("customer_mobile", payload.customerMobile);
-          formData.set("amount", payload.amount);
-          formData.set("order_id", payload.orderId);
-          formData.set("redirect_url", payload.returnUrl);
-          formData.set("remark1", "website-demo");
-          formData.set("remark2", payload.orderId);
-        } else {
-          formData.set("order_id", payload.orderId);
-        }
-        try {
-          response = await fetch(`${GATEWAY_API}/${action}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
-            body: formData.toString()
-          });
-        } catch (error) {
-          if (error instanceof TypeError) {
-            throw new Error("The browser could not reach the gateway. Check your connection; if it persists, the gateway may not allow CORS requests from this website. A static website cannot proxy around that restriction.");
-          }
-          throw new Error("Could not complete the gateway request. Check your connection and try again.");
-        }
-
-        let data;
-        try {
-          data = await response.json();
-        } catch {
-          throw new Error("The payment service returned an unreadable response.");
-        }
-        if (!response.ok) {
-          throw new Error(typeof data.message === "string" ? data.message : "The payment service request failed.");
-        }
-        return data;
-      }
-
-      function findCheckoutUrl(value, depth = 0) {
-        if (depth > 5 || value === null || typeof value !== "object") return null;
-        const urlKeys = new Set(["payment_url", "paymenturl", "checkout_url", "checkouturl", "payment_link", "paymentlink", "url"]);
-        for (const [key, child] of Object.entries(value)) {
-          if (urlKeys.has(key.toLowerCase()) && typeof child === "string") {
-            try {
-              const url = new URL(child);
-              if (url.protocol === "https:" && !url.username && !url.password) return url.href;
-            } catch {
-              // Ignore malformed URLs and continue searching the gateway response.
-            }
-          }
-          const nested = findCheckoutUrl(child, depth + 1);
-          if (nested) return nested;
-        }
-        return null;
-      }
-
-      function findField(value, names, depth = 0) {
-        if (depth > 5 || value === null || typeof value !== "object") return null;
-        for (const [key, child] of Object.entries(value)) {
-          if (names.has(key.toLowerCase()) && typeof child === "string" && child.trim()) return child;
-          const nested = findField(child, names, depth + 1);
-          if (nested) return nested;
-        }
-        return null;
-      }
-
-      function createOrderId() {
-        const random = new Uint32Array(1);
-        crypto.getRandomValues(random);
-        return `${Date.now()}${String(random[0] % 1000000).padStart(6, "0")}`;
-      }
-
-      function scheduleStatusCheck() {
-        clearTimeout(pollTimer);
-        if (!polling || !activeOrder) return;
-        if (Date.now() - activeOrder.pollStartedAt >= MAX_POLL_DURATION_MS) {
-          polling = false;
-          setStatus(`Still waiting for final status.\nOrder ID: ${activeOrder.orderId}\nTap Check payment status to try again.`, "pending");
-          return;
-        }
-        pollTimer = setTimeout(() => checkOrderStatus(false), POLL_INTERVAL_MS);
-      }
-
-      async function checkOrderStatus(showProgress = true) {
-        if (!activeOrder || checking) return;
-        const userToken = tokenInput.value.trim();
-        if (!userToken) {
-          setStatus("Enter the gateway API token before checking payment status.", "error");
-          return;
-        }
-        checking = true;
-        checkButton.disabled = true;
-        if (showProgress) setStatus("Checking status with the gateway…", "pending");
-        try {
-          const data = await requestGateway("check-order-status", { orderId: activeOrder.orderId, userToken });
-          const result = data.result && typeof data.result === "object" ? data.result : {};
-          const gatewayStatus = String(data.status || result.txnStatus || result.status || "UNKNOWN").toUpperCase();
-          const message = typeof data.message === "string" ? data.message : "";
-          const transactionId = findField(data, new Set(["transaction_id", "txn_id", "transactionid"]));
-          const lines = [
-            gatewayStatus === "COMPLETED" ? "PAYMENT SUCCESS" :
-              ["FAILED", "FAILURE"].includes(gatewayStatus) ? "PAYMENT FAILED" :
-                ["CANCELLED", "CANCELED"].includes(gatewayStatus) ? "PAYMENT CANCELLED" :
-                  `PAYMENT STATUS: ${gatewayStatus}`,
-            `Order ID: ${activeOrder.orderId}`
-          ];
-          if (transactionId) lines.push(`Transaction ID: ${transactionId}`);
-          if (message) lines.push(message);
-          const terminal = TERMINAL_STATUSES.has(gatewayStatus);
-          setStatus(lines.join("\n"), terminal && gatewayStatus === "COMPLETED" ? "success" : terminal ? "error" : "pending");
-          if (terminal) {
-            polling = false;
-            clearTimeout(pollTimer);
-            activeOrder = null;
-            saveActiveOrder();
-            orderActions.hidden = true;
-          }
-        } catch (error) {
-          setStatus(`${error.message}\nOrder ID: ${activeOrder.orderId}`, "error");
-        } finally {
-          checking = false;
-          checkButton.disabled = !activeOrder;
-          if (polling && activeOrder) scheduleStatusCheck();
-        }
-      }
-
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        if (!form.reportValidity()) return;
-
-        const mobile = mobileInput.value.replace(/\D/g, "");
-        const userToken = tokenInput.value.trim();
-        const amountText = amountInput.value.trim();
-        const amount = Number(amountText);
-        if (!/^[6-9]\d{9}$/.test(mobile)) {
-          mobileInput.setCustomValidity("Enter a valid 10-digit Indian mobile number.");
-          mobileInput.reportValidity();
-          mobileInput.setCustomValidity("");
-          return;
-        }
-        if (!/^\d+(?:\.\d{1,2})?$/.test(amountText) || !Number.isFinite(amount) || amount < 1 || amount > 1000000) {
-          amountInput.setCustomValidity("Enter an amount from ₹1 to ₹10,00,000 with at most two decimals.");
-          amountInput.reportValidity();
-          amountInput.setCustomValidity("");
-          return;
-        }
-
-        createButton.disabled = true;
-        checkButton.disabled = true;
-        setStatus("Creating payment order…", "pending");
-        checkoutTab = isSecureOrigin ? window.open("about:blank", "_blank") : null;
-        if (checkoutTab) checkoutTab.opener = null;
-        const orderId = createOrderId();
-        const returnUrl = new URL(window.location.href);
-        returnUrl.hash = "";
-
-        try {
-          const data = await requestGateway("create-order", {
-            userToken,
-            customerMobile: mobile,
-            amount: amount.toFixed(2).replace(/\.?0+$/, ""),
-            orderId,
-            returnUrl: returnUrl.href
-          });
-          if (data.status !== true && data.success !== true) {
-            throw new Error(typeof data.message === "string" ? data.message : "The gateway rejected the order request.");
-          }
-          const paymentUrl = findCheckoutUrl(data);
-          if (!paymentUrl) throw new Error("The order was created, but the response did not contain a secure HTTPS checkout URL.");
-
-          activeOrder = { orderId, amount: amountText, paymentUrl, pollStartedAt: Date.now() };
-          saveActiveOrder();
-          orderActions.hidden = false;
-          checkoutLink.href = paymentUrl;
-          checkoutLink.hidden = false;
-          polling = true;
-          const openedCheckout = checkoutTab && !checkoutTab.closed;
-          if (openedCheckout) checkoutTab.location.replace(paymentUrl);
-          setStatus(
-            `${openedCheckout ? "Checkout opened in a new tab." : "Your browser blocked automatic checkout opening. Use Open checkout below."}\nOrder ID: ${orderId}\nComplete or cancel checkout, then return here for the payment status.`,
-            "pending"
-          );
-          scheduleStatusCheck();
-        } catch (error) {
-          if (checkoutTab && !checkoutTab.closed) checkoutTab.close();
-          checkoutTab = null;
-          setStatus(error.message, "error");
-        } finally {
-          createButton.disabled = false;
-          checkButton.disabled = !activeOrder;
-        }
-      });
-
-      checkButton.addEventListener("click", () => {
-        polling = true;
-        if (!activeOrder.pollStartedAt) activeOrder.pollStartedAt = Date.now();
-        checkOrderStatus(true);
-      });
-
-      amountInput.addEventListener("input", updateCreateLabel);
-      mobileInput.addEventListener("input", () => {
-        mobileInput.value = mobileInput.value.replace(/\D/g, "").slice(0, 10);
-      });
-
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden && activeOrder && polling) checkOrderStatus(true);
-      });
-      window.addEventListener("focus", () => {
-        if (activeOrder && polling) checkOrderStatus(true);
-      });
-
-      restoreActiveOrder();
-      if (activeOrder) {
-        polling = true;
-        activeOrder.pollStartedAt = Date.now();
-        if (isSecureOrigin && tokenInput.value.trim()) checkOrderStatus(true);
-      }
-      updateCreateLabel();
-    })();
-  </script>
+    <section class="main-column">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="menu-toggle" type="button" aria-label="Open navigation">☰</button>
+        <div class="aia-mobile-brand"><img src="logo.svg" alt=""><strong>Kalyan Gold Matka</strong><span class="aia-online"><i></i>ACTIVE</span></div>
+        <div class="aia-mobile-balance"><img src="icon-coin.png" alt=""><strong id="aia-header-balance">₹ 0</strong></div>
+        <div class="breadcrumb"><span>Kalyan Gold</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
+        <div class="top-actions">
+          <button class="icon-button notice-button" type="button" data-page="notices" aria-label="Notices">♧<span class="notification-dot"></span></button>
+          <button class="user-chip" type="button" data-page="profile"><span class="avatar" id="header-avatar">K</span><span class="user-chip-copy"><strong id="header-name">Player</strong><small>My account</small></span><span class="chevron">⌄</span></button>
+        </div>
+      </header>
+      <div class="content-wrap">
+        <div id="page-content"></div>
+        <footer class="page-footer"><span>© <span id="current-year"></span> Kalyan Gold</span><span>Play responsibly · 18+</span></footer>
+      </div>
+    </section>
+    <nav class="mobile-bottom-nav" aria-label="App navigation">
+      <button type="button" data-page="points" aria-label="Points"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg></span><small>Points</small></button>
+      <button type="button" data-action="open-results-website" aria-label="Results"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3c2.2 2.4 3.2 5.4 3.2 9s-1 6.6-3.2 9c-2.2-2.4-3.2-5.4-3.2-9S9.8 5.4 12 3Z"/></svg></span><small>Results</small></button>
+      <button class="aia-game-nav active" type="button" data-page="markets" aria-label="Games"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 8.5h9.6a4.2 4.2 0 0 1 4 3l1 3.7a2.2 2.2 0 0 1-3.5 2.3l-2.1-1.7H7.8l-2.1 1.7a2.2 2.2 0 0 1-3.5-2.3l1-3.7a4.2 4.2 0 0 1 4-3Z"/><path d="M7.5 10.8v4m-2-2h4m7.3-.5h.1m2 2h.1"/></svg></span><small>Games</small></button>
+      <button type="button" data-page="deposit" aria-label="Wallet"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5h15a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h13v4"/><path d="M16 12.5h5m-4 0h.1"/></svg></span><small>Wallet</small></button>
+      <button type="button" data-page="support" aria-label="Support"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></span><small>Support</small></button>
+    </nav>
+  </div>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
