@@ -1,0 +1,9 @@
+Options -Indexes
+
+<Files "gateway-config.php">
+    Require all denied
+</Files>
+
+<Files "gateway-config.example.php">
+    Require all denied
+</Files>
