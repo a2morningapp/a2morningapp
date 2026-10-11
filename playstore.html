@@ -6,18 +6,18 @@
     <title>Opening Google Play...</title>
     <script>
       const packageName = "a2.morning.ck";
-      const playStoreAppUrl = `market://details?id=${packageName}`;
+      const playStoreAppUrl = `intent://details?id=${packageName}#Intent;scheme=market;package=com.android.vending;end`;
       const playStoreWebUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
 
       if (/Android/i.test(navigator.userAgent)) {
-        window.location.href = playStoreAppUrl;
+        window.location.replace(playStoreAppUrl);
       } else {
         window.location.replace(playStoreWebUrl);
       }
     </script>
   </head>
   <body>
-    <p>Opening Google Play. If it does not open automatically, <a href="market://details?id=a2.morning.ck">tap here to open the app in Play Store</a>.</p>
+    <p>Opening Google Play. If it does not open automatically, <a href="intent://details?id=a2.morning.ck#Intent;scheme=market;package=com.android.vending;end">tap here to open the app in Play Store</a>.</p>
     <p><a href="https://play.google.com/store/apps/details?id=a2.morning.ck">Open the Google Play listing in your browser</a>.</p>
   </body>
 </html>
