@@ -3,10 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0;url=https://wa.me/919784104853">
     <title>Opening WhatsApp...</title>
     <script>
-      window.location.replace("https://wa.me/919784104853");
+      const phoneNumber = "919784104853";
+      const whatsappUrl = `https://wa.me/${phoneNumber}`;
+
+      if (/Android/i.test(navigator.userAgent)) {
+        const fallbackUrl = encodeURIComponent(whatsappUrl);
+        window.location.replace(
+          `intent://send?phone=${phoneNumber}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${fallbackUrl};end`
+        );
+      } else {
+        window.location.replace(whatsappUrl);
+      }
     </script>
   </head>
   <body>
