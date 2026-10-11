@@ -7,18 +7,18 @@
     <script>
       const phoneNumber = "919784104853";
       const whatsappUrl = `https://wa.me/${phoneNumber}`;
+      const whatsappAppUrl =
+        `intent://send?phone=${phoneNumber}#Intent;scheme=whatsapp;package=com.whatsapp;end`;
 
       if (/Android/i.test(navigator.userAgent)) {
-        const fallbackUrl = encodeURIComponent(whatsappUrl);
-        window.location.replace(
-          `intent://send?phone=${phoneNumber}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${fallbackUrl};end`
-        );
+        window.location.href = whatsappAppUrl;
       } else {
         window.location.replace(whatsappUrl);
       }
     </script>
   </head>
   <body>
-    <p>Opening WhatsApp. If you are not redirected, <a href="https://wa.me/919784104853">tap here to chat</a>.</p>
+    <p>Opening WhatsApp. If it does not open automatically, <a href="intent://send?phone=919784104853#Intent;scheme=whatsapp;package=com.whatsapp;end">tap here to open the chat in WhatsApp</a>.</p>
+    <p><a href="https://wa.me/919784104853">Open the chat in your browser</a>.</p>
   </body>
 </html>
