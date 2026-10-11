@@ -3,43 +3,21 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#ffffff">
     <title>Opening Google Play...</title>
-    <style>
-      body {
-        max-width: 32rem;
-        margin: 4rem auto;
-        padding: 0 1.25rem;
-        font: 1rem/1.5 system-ui, sans-serif;
-        color: #202124;
-      }
-
-      a {
-        display: inline-block;
-        margin: 0.5rem 0;
-        padding: 0.75rem 1rem;
-        border-radius: 0.35rem;
-        background: #137333;
-        color: #fff;
-        text-decoration: none;
-      }
-    </style>
     <script>
-      const packageName = "a2.mornng.ck";
-      const playStoreAppUrl =
-        `intent://details?id=${packageName}#Intent;scheme=market;package=com.android.vending;end`;
+      const packageName = "a2.morning.ck";
+      const playStoreAppUrl = `market://details?id=${packageName}`;
+      const playStoreWebUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
 
       if (/Android/i.test(navigator.userAgent)) {
-        window.setTimeout(() => {
-          window.location.href = playStoreAppUrl;
-        }, 300);
+        window.location.href = playStoreAppUrl;
+      } else {
+        window.location.replace(playStoreWebUrl);
       }
     </script>
   </head>
   <body>
-    <h1>Open in Google Play</h1>
-    <p>If Google Play does not open automatically, use the button below.</p>
-    <p><a href="market://details?id=a2.mornng.ck">Open app in Play Store</a></p>
-    <p><a href="https://play.google.com/store/apps/details?id=a2.mornng.ck">View the Google Play listing in your browser</a></p>
+    <p>Opening Google Play. If it does not open automatically, <a href="market://details?id=a2.morning.ck">tap here to open the app in Play Store</a>.</p>
+    <p><a href="https://play.google.com/store/apps/details?id=a2.morning.ck">Open the Google Play listing in your browser</a>.</p>
   </body>
 </html>
