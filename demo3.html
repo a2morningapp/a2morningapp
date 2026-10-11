@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WhatsApp Link Demo</title>
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        font-family: system-ui, sans-serif;
+      }
+
+      button {
+        padding: 0.8rem 1.25rem;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="show-link" type="button">Show WhatsApp link</button>
+    <script>
+      document.getElementById("show-link").addEventListener("click", () => {
+        console.log("https://wa.me/919784104853");
+      });
+    </script>
+  </body>
+</html>
