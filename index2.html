@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#063759">
-  <title>Kalyan Gold | Matka</title>
+  <meta name="theme-color" content="#f8f6ec">
+  <title>MAMA567</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="web-styles.css">
+  <link rel="stylesheet" href="web-native-app.css">
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
-  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="web-app.js" defer></script>
 </head>
 <body>
   <main id="auth-view" class="auth-shell">
     <section class="auth-brand">
-      <a class="brand-lockup" href="#" aria-label="Kalyan Gold home">
-        <img src="logo.svg" alt="" class="brand-logo">
-        <span><strong>KALYAN</strong><small>GOLD</small></span>
+      <a class="brand-lockup" href="#" aria-label="MAMA567 home">
+        <img src="web-mama567.webp" alt="" class="brand-logo">
+        <span><strong>MAMA567</strong><small>MATKA</small></span>
       </a>
       <div class="brand-copy">
-        <p class="eyebrow">WELCOME TO KALYAN GOLD</p>
+        <p class="eyebrow">WELCOME TO MAMA567</p>
         <h1>Your games.<br><span>Your numbers.</span></h1>
         <p>One place for market updates, game charts and your points activity.</p>
       </div>
@@ -31,8 +31,8 @@
     <section class="auth-panel">
       <div class="auth-card">
         <div class="mobile-brand">
-          <img src="logo.svg" alt="" class="brand-logo">
-          <strong>KALYAN <span>GOLD</span></strong>
+          <img src="web-mama567.webp" alt="" class="brand-logo">
+          <strong>MAMA<span>567</span></strong>
         </div>
         <p class="eyebrow" id="auth-eyebrow">YOUR ACCOUNT</p>
         <h2 id="auth-title">Welcome back</h2>
@@ -63,8 +63,8 @@
     <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close navigation"></button>
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-brand" href="#" data-page="home">
-        <img src="logo.svg" alt="" class="brand-logo">
-        <span><strong>Kalyan Gold</strong><small>MATKA</small></span>
+        <img src="web-mama567.webp" alt="" class="brand-logo">
+        <span><strong>MAMA567</strong><small>MATKA</small></span>
       </a>
       <nav class="side-nav" aria-label="Main navigation">
         <div class="nav-caption">MENU</div>
@@ -91,9 +91,10 @@
     <section class="main-column">
       <header class="topbar">
         <button class="icon-button mobile-menu" id="menu-toggle" type="button" aria-label="Open navigation">☰</button>
-        <div class="aia-mobile-brand"><img src="logo.svg" alt=""><strong>Kalyan Gold Matka</strong><span class="aia-online"><i></i>ACTIVE</span></div>
-        <div class="aia-mobile-balance"><img src="icon-coin.png" alt=""><strong id="aia-header-balance">₹ 0</strong></div>
-        <div class="breadcrumb"><span>Kalyan Gold</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
+        <div class="aia-mobile-brand"><img src="web-mama567.webp" alt=""><strong>MAMA567</strong><span class="aia-online"><i></i>ACTIVE</span></div>
+        <div class="aia-mobile-balance"><img src="web-icon-coin.png" alt=""><strong id="aia-header-balance">₹ 0</strong></div>
+        <button class="aia-mobile-notices" type="button" data-page="notices" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
+        <div class="breadcrumb"><span>MAMA567</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
         <div class="top-actions">
           <button class="icon-button notice-button" type="button" data-page="notices" aria-label="Notices">♧<span class="notification-dot"></span></button>
           <button class="user-chip" type="button" data-page="profile"><span class="avatar" id="header-avatar">K</span><span class="user-chip-copy"><strong id="header-name">Player</strong><small>My account</small></span><span class="chevron">⌄</span></button>
@@ -101,17 +102,29 @@
       </header>
       <div class="content-wrap">
         <div id="page-content"></div>
-        <footer class="page-footer"><span>© <span id="current-year"></span> Kalyan Gold</span><span>Play responsibly · 18+</span></footer>
+        <footer class="page-footer"><span>© <span id="current-year"></span> MAMA567</span><span>Play responsibly · 18+</span></footer>
       </div>
     </section>
     <nav class="mobile-bottom-nav" aria-label="App navigation">
       <button type="button" data-page="points" aria-label="Points"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg></span><small>Points</small></button>
-      <button type="button" data-action="open-results-website" aria-label="Results"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3c2.2 2.4 3.2 5.4 3.2 9s-1 6.6-3.2 9c-2.2-2.4-3.2-5.4-3.2-9S9.8 5.4 12 3Z"/></svg></span><small>Results</small></button>
+      <button type="button" data-page="bids" aria-label="Bids"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v6h6M9 13h6m-6 4h6"/></svg></span><small>Bids</small></button>
       <button class="aia-game-nav active" type="button" data-page="markets" aria-label="Games"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 8.5h9.6a4.2 4.2 0 0 1 4 3l1 3.7a2.2 2.2 0 0 1-3.5 2.3l-2.1-1.7H7.8l-2.1 1.7a2.2 2.2 0 0 1-3.5-2.3l1-3.7a4.2 4.2 0 0 1 4-3Z"/><path d="M7.5 10.8v4m-2-2h4m7.3-.5h.1m2 2h.1"/></svg></span><small>Games</small></button>
       <button type="button" data-page="deposit" aria-label="Wallet"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5h15a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h13v4"/><path d="M16 12.5h5m-4 0h.1"/></svg></span><small>Wallet</small></button>
       <button type="button" data-page="support" aria-label="Support"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></span><small>Support</small></button>
     </nav>
   </div>
+  <section id="exit-dialog" class="exit-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="exit-dialog-title">
+    <div class="exit-dialog-card">
+      <button class="exit-dialog-close" type="button" data-action="exit-dialog-close" aria-label="Close dialog">×</button>
+      <span class="exit-dialog-icon" aria-hidden="true">↩</span>
+      <h2 id="exit-dialog-title">Leave MAMA567?</h2>
+      <p>Are you sure you want to close the application?</p>
+      <div class="exit-dialog-actions">
+        <button class="exit-dialog-cancel" type="button" data-action="exit-dialog-cancel">No, stay</button>
+        <button class="exit-dialog-confirm" type="button" data-action="exit-dialog-confirm">Yes, close</button>
+      </div>
+    </div>
+  </section>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
