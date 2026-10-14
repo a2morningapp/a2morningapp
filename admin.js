@@ -8,11 +8,61 @@ const firebaseConfig = {
   appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
   measurementId: "G-2HVR18MNEZ",
 };
-const ADMIN_SESSION_KEY = "kalyanGoldAdminSession";
-const BROADCAST_ENDPOINT_KEY = "kalyanGoldBroadcastEndpoint";
-const BROADCAST_TOKEN_KEY = "kalyanGoldBroadcastToken";
-const BROADCAST_SENDER_VERSION = "2026-10-08-android-subscription-export-1";
+const expertGuessingFirebaseConfig = {
+  apiKey: "AIzaSyCGqJ1XvEYbgJ_eN5OEuzAymc3E4wKr8eI",
+  authDomain: "a2morning-web-result.firebaseapp.com",
+  databaseURL: "https://a2morning-web-result-default-rtdb.firebaseio.com",
+  projectId: "a2morning-web-result",
+  storageBucket: "a2morning-web-result.firebasestorage.app",
+  messagingSenderId: "807940358876",
+  appId: "1:807940358876:web:37d5de4963837b8783aa19",
+  measurementId: "G-FD7MK1CWCK",
+};
+const resultChartDatabaseUrl = expertGuessingFirebaseConfig.databaseURL;
+const DEFAULT_RESULT_CHART_URL = new URL("result.html", window.location.href).href;
+const ADMIN_SESSION_KEY = "a2morningAdminSession";
+const ADMIN_CREDENTIAL_FINGERPRINT_KEY = "a2morningAdminCredentialFingerprint";
+const BROADCAST_ENDPOINT_KEY = "a2morningBroadcastEndpoint";
+const BROADCAST_TOKEN_KEY = "a2morningBroadcastToken";
+const BROADCAST_SENDER_VERSION = "2026-10-14-a2morning-admin-v1";
+const BROADCAST_IMAGE_URL = new URL("a2morning.png", window.location.href).href;
+const DEFAULT_WITHDRAWAL_WINDOWS = {
+  morning: { open: "09:30", close: "13:30" },
+  evening: { open: "18:45", close: "21:00" },
+};
+const MARKET_WEEKDAYS = [
+  { name: "Monday", bucket: "GAMES" },
+  { name: "Tuesday", bucket: "GAMES" },
+  { name: "Wednesday", bucket: "GAMES" },
+  { name: "Thursday", bucket: "GAMES" },
+  { name: "Friday", bucket: "GAMES" },
+  { name: "Saturday", bucket: "GAMES2" },
+  { name: "Sunday", bucket: "GAMES3" },
+];
 const pendingBroadcasts = new Map();
+let adminExpertGuessing = {};
+let adminExpertGuessingLoaded = false;
+let adminExpertGuessingLoadInProgress = false;
+let adminExpertGuessingSeedInProgress = false;
+let withdrawalWindowsSeedStarted = false;
+const generatedExpertGuessing = new Map();
+
+function migrateStorageKey(storage, oldKey, newKey) {
+  if (!storage.getItem(newKey)) {
+    const oldValue = storage.getItem(oldKey);
+    if (oldValue) storage.setItem(newKey, oldValue);
+  }
+}
+
+migrateStorageKey(localStorage, "kalyanGoldAdminSession", ADMIN_SESSION_KEY);
+migrateStorageKey(localStorage, "kalyanGoldBroadcastEndpoint", BROADCAST_ENDPOINT_KEY);
+if (!localStorage.getItem(BROADCAST_TOKEN_KEY)) {
+  const previousToken = sessionStorage.getItem(BROADCAST_TOKEN_KEY)
+    || sessionStorage.getItem("kalyanGoldBroadcastToken");
+  if (previousToken) localStorage.setItem(BROADCAST_TOKEN_KEY, previousToken);
+}
+sessionStorage.removeItem(BROADCAST_TOKEN_KEY);
+sessionStorage.removeItem("kalyanGoldBroadcastToken");
 
 const navigation = [
   { section: "OVERVIEW" },
@@ -20,9 +70,11 @@ const navigation = [
   { id: "new-users", label: "New users", icon: "✦" },
   { section: "OPERATIONS" },
   { id: "players", label: "Players", icon: "♙" },
-  { id: "requests", label: "Payment requests", icon: "⇄", count: "pending" },
+  { id: "deposit-requests", label: "Deposit requests", icon: "＋", count: "deposit-pending" },
+  { id: "withdrawal-requests", label: "Withdrawal requests", icon: "↗", count: "withdrawal-pending" },
   { id: "markets", label: "Markets & games", icon: "◈" },
   { id: "results", label: "Update results", icon: "✓" },
+  { id: "winners", label: "Winners", icon: "★" },
   { id: "rates", label: "Rate chart", icon: "▤" },
   { section: "INSIGHTS & TOOLS" },
   { id: "transactions", label: "Transactions", icon: "↕" },
@@ -42,6 +94,7 @@ const icons = {
   withdraw: "withdrawal.png",
   requests: "withdraw_request.png",
   results: "Update_result.png",
+  winners: "Winners.png",
   markets: "admin.png",
   played: "played_games.png",
   reports: "old_records.png",
@@ -74,16 +127,19 @@ const defaultData = {
     openBets: true,
     closeBets: true,
     signUpBonus: 0,
+    minimumDeposit: 0,
     minimumWithdrawal: 0,
     minimumEntry: 0,
     maximumEntry: 0,
     withdrawTiming: "",
+    withdrawalWindows: DEFAULT_WITHDRAWAL_WINDOWS,
+    withdrawalWindowsConfigured: false,
     policy: "",
     websiteUrl: "",
     contactUrl: "",
     telegramUrl: "",
-    resultChartUrl: "",
-    noticeTitle: "Welcome to Kalyan Gold",
+    resultChartUrl: DEFAULT_RESULT_CHART_URL,
+    noticeTitle: "Welcome to A2 MORNING",
     noticeMessage: "Good luck and play responsibly.",
   },
 };
@@ -166,13 +222,47 @@ function legacyMarketTime(value) {
 function nextLegacyMarketKey(source) {
   const usedKeys = new Set([
     ...Array.from(legacyMarketKeys.get(source) || []),
-    ...data.markets
-      .filter((market) => market.legacySource === source)
-      .map((market) => String(market.legacyKey)),
+    ...data.markets.flatMap((market) => {
+      const entries = marketLegacyEntries(market);
+      return entries[source] ? [String(entries[source])] : [];
+    }),
   ]);
   let key = 1;
   while (usedKeys.has(String(key))) key += 1;
   return String(key);
+}
+
+function marketLegacyEntries(market) {
+  if (market?.legacyEntries && typeof market.legacyEntries === "object") {
+    return Object.fromEntries(Object.entries(market.legacyEntries)
+      .filter(([source, key]) => ["GAMES", "GAMES2", "GAMES3"].includes(source) && key !== "" && key !== null)
+      .map(([source, key]) => [source, String(key)]));
+  }
+  return market?.legacySource && market?.legacyKey
+    ? { [market.legacySource]: String(market.legacyKey) }
+    : {};
+}
+
+function marketDaysForSource(source) {
+  return MARKET_WEEKDAYS.filter((day) => day.bucket === source).map((day) => day.name);
+}
+
+function normalizedMarketDays(value, fallback = []) {
+  const values = Array.isArray(value) ? value : [];
+  const selected = new Set(values.map((day) => String(day).trim().toLowerCase()));
+  const days = MARKET_WEEKDAYS
+    .map((day) => day.name)
+    .filter((day) => selected.has(day.toLowerCase()));
+  return days.length ? days : fallback.slice();
+}
+
+function marketDaysLabel(days) {
+  const selected = new Set(normalizedMarketDays(days));
+  if (selected.size === 7) return "Every day";
+  if (["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].every((day) => selected.has(day))) return "Mon–Sat";
+  if (["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].every((day) => selected.has(day))) return "Mon–Fri";
+  if (selected.size === 2 && selected.has("Friday") && selected.has("Saturday")) return "Fri–Sat";
+  return MARKET_WEEKDAYS.filter((day) => selected.has(day.name)).map((day) => day.name.slice(0, 3)).join(", ") || "No days selected";
 }
 
 function decodeLegacyValue(value) {
@@ -187,6 +277,199 @@ function decodeLegacyValue(value) {
     }
   }
   return decoded;
+}
+
+function normalizeWithdrawalWindows(value) {
+  const decoded = decodeLegacyValue(value);
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return DEFAULT_WITHDRAWAL_WINDOWS;
+  const window = (period, openKey, closeKey) => {
+    const entry = decodeLegacyValue(decoded[period]);
+    const fields = entry && typeof entry === "object" && !Array.isArray(entry) ? entry : {};
+    return {
+      open: String(decodeLegacyValue(fields.open ?? decoded[openKey]) || ""),
+      close: String(decodeLegacyValue(fields.close ?? decoded[closeKey]) || ""),
+    };
+  };
+  const result = {
+    morning: window("morning", "morningOpen", "morningClose"),
+    evening: window("evening", "eveningOpen", "eveningClose"),
+  };
+  const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  return Object.values(result).every(item => validTime(item.open) && validTime(item.close))
+    ? result : DEFAULT_WITHDRAWAL_WINDOWS;
+}
+
+function normalizeExpertGuessing(value) {
+  const decoded = decodeLegacyValue(value);
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return {};
+  return Object.fromEntries(Object.entries(decoded).map(([key, rawGuess]) => {
+    const guess = decodeLegacyValue(rawGuess);
+    if (!guess || typeof guess !== "object" || Array.isArray(guess)) return [key, {}];
+    return [key, {
+      marketName: String(guess.marketName || key),
+      ank: guess.ANK ?? guess.ank ?? [],
+      jodi: guess.JODI ?? guess.jodi ?? [],
+      panna: guess.PANNA ?? guess.panna ?? [],
+    }];
+  }));
+}
+
+function adminGuessingMarketKey(name) {
+  return String(name || "").trim().replace(/[.#$\[\]/]/g, "_");
+}
+
+function adminGuessingMarket(marketName) {
+  const normalizedName = String(marketName || "").trim().toLocaleLowerCase();
+  const entry = Object.entries(adminExpertGuessing).find(([key, guess]) =>
+    String(guess.marketName || key).trim().toLocaleLowerCase() === normalizedName
+  );
+  return entry ? entry[1] : null;
+}
+
+function displayGuessNumbers(value) {
+  if (Array.isArray(value)) return value.map(item => String(item ?? "").trim()).filter(Boolean).join(" - ");
+  if (value && typeof value === "object" && Object.keys(value).every(key => /^\d+$/.test(key))) {
+    return Object.entries(value).sort(([left], [right]) => Number(left) - Number(right))
+      .map(([, item]) => String(item ?? "").trim()).filter(Boolean).join(" - ");
+  }
+  return String(value || "").trim();
+}
+
+function randomGuessNumbers(count, digits) {
+  const values = [];
+  const cryptoSource = globalThis.crypto;
+  for (let index = 0; index < count; index += 1) {
+    const buffer = new Uint32Array(1);
+    if (cryptoSource?.getRandomValues) cryptoSource.getRandomValues(buffer);
+    else buffer[0] = Math.floor(Math.random() * 0xFFFFFFFF);
+    const max = 10 ** digits;
+    values.push(String(buffer[0] % max).padStart(digits, "0"));
+  }
+  return values;
+}
+
+function defaultAdminGuess(marketName) {
+  const key = String(marketName || "").trim().toLocaleLowerCase();
+  if (!generatedExpertGuessing.has(key)) {
+    const values = {
+      ank: randomGuessNumbers(4, 1),
+      jodi: randomGuessNumbers(8, 2),
+      panna: randomGuessNumbers(6, 3),
+    };
+    generatedExpertGuessing.set(key, values);
+  }
+  return generatedExpertGuessing.get(key);
+}
+
+async function fetchAdminExpertGuessing() {
+  const snapshot = await expertGuessingDatabaseRef().once("value");
+  adminExpertGuessing = normalizeExpertGuessing(snapshot.val());
+}
+
+function expertGuessingDatabaseRef() {
+  const app = firebase.apps.find(item => item.name === "a2morning-expert-guessing")
+    || firebase.initializeApp(expertGuessingFirebaseConfig, "a2morning-expert-guessing");
+  return firebase.database(app).ref("ExpertGuessing");
+}
+
+function uniqueGuessingMarkets() {
+  return [...new Map([...data.markets]
+    .sort((left, right) => Number(left.position) - Number(right.position) || left.name.localeCompare(right.name))
+    .map(market => [market.name.trim().toLocaleLowerCase(), market])).values()];
+}
+
+function parseGuessNumbers(value, digits, label, marketName) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+  const numbers = text.split(/[\s,-]+/).filter(Boolean);
+  if (!numbers.length || numbers.some(number => !new RegExp(`^\\d{1,${digits}}$`).test(number))) {
+    throw new Error(`${label} for ${marketName} must be separated by spaces, commas, or hyphens and contain at most ${digits} digits per number.`);
+  }
+  return numbers.map(number => digits === 1 ? Number(number) : number.padStart(digits, "0"));
+}
+
+async function saveAdminExpertGuessing(form) {
+  const markets = uniqueGuessingMarkets();
+  if (!markets.length) throw new Error("Add at least one market before saving expert numbers.");
+  const patch = {};
+  for (const [index, market] of markets.entries()) {
+    const key = adminGuessingMarketKey(market.name);
+    const ank = parseGuessNumbers(form.get(`guess-${index}-ank`), 1, "ANK", market.name);
+    const jodi = parseGuessNumbers(form.get(`guess-${index}-jodi`), 2, "JODI", market.name);
+    const panna = parseGuessNumbers(form.get(`guess-${index}-panna`), 3, "PANNA", market.name);
+    patch[key] = ank.length || jodi.length || panna.length
+      ? { marketName: market.name, ANK: ank, JODI: jodi, PANNA: panna }
+      : null;
+  }
+  try {
+    await expertGuessingDatabaseRef().update(patch);
+  } catch (error) {
+    throw new Error(`Expert numbers were not saved to web-result Firebase: ${error.message}`);
+  }
+  await fetchAdminExpertGuessing();
+  for (const market of markets) {
+    const entry = adminGuessingMarket(market.name);
+    if (!entry && patch[adminGuessingMarketKey(market.name)] !== null) {
+      throw new Error(`Firebase did not return saved expert numbers for ${market.name}.`);
+    }
+  }
+}
+
+async function seedMissingAdminExpertGuessing() {
+  if (adminExpertGuessingSeedInProgress) return;
+  const markets = uniqueGuessingMarkets();
+  if (!markets.length) return;
+  const missing = markets.filter(market => !adminGuessingMarket(market.name));
+  if (!missing.length) return;
+  adminExpertGuessingSeedInProgress = true;
+  try {
+    const patch = {};
+    for (const market of missing) {
+      const guess = defaultAdminGuess(market.name);
+      patch[adminGuessingMarketKey(market.name)] = {
+        marketName: market.name,
+        ANK: guess.ank,
+        JODI: guess.jodi,
+        PANNA: guess.panna,
+      };
+    }
+    try {
+      await expertGuessingDatabaseRef().update(patch);
+    } catch (error) {
+      throw new Error(`Could not create expert numbers for all markets in web-result Firebase: ${error.message}`);
+    }
+    await fetchAdminExpertGuessing();
+    if (missing.some(market => !adminGuessingMarket(market.name))) {
+      throw new Error("Some market expert numbers could not be confirmed after saving.");
+    }
+    if (currentPage === "settings") render();
+    toast(`Created editable expert number sets for ${missing.length} market${missing.length === 1 ? "" : "s"}.`);
+  } finally {
+    adminExpertGuessingSeedInProgress = false;
+  }
+}
+
+function ensureDefaultWithdrawalWindows(root) {
+  if (withdrawalWindowsSeedStarted) return;
+  const configured = root.Admin?.Admin?.WRTiming;
+  if (configured !== undefined && configured !== null) {
+    withdrawalWindowsSeedStarted = true;
+    return;
+  }
+  withdrawalWindowsSeedStarted = true;
+  databaseRootRef.child("Admin/Admin/WRTiming").transaction(current =>
+    current === null ? DEFAULT_WITHDRAWAL_WINDOWS : undefined
+  ).then(result => {
+    if (result.committed) toast("Default withdrawal hours saved at Admin/Admin/WRTiming.");
+  }).catch(error => {
+    withdrawalWindowsSeedStarted = false;
+    toast(`Default withdrawal hours could not be saved: ${error.message}`, true);
+  });
+}
+
+function isTruthySetting(value) {
+  const decoded = decodeLegacyValue(value);
+  return decoded === true || decoded === 1 || /^(true|1|yes|on|blocked)$/i.test(String(decoded ?? "").trim());
 }
 
 function parseLegacyBidHistoryTag(value) {
@@ -222,8 +505,10 @@ function legacyPaymentRequest(value, kind) {
   const decoded = decodeLegacyValue(value);
   if (!Array.isArray(decoded)) {
     const amount = legacyRequestAmount(decoded);
-    return { amount, amountUnavailable: amount === null, method: "Legacy record", details: "", balanceDeducted: false };
+    return { amount, amountUnavailable: amount === null, method: "Legacy record", details: "", balanceDeducted: false, status: "Pending" };
   }
+  const rawStatus = String(decoded.at(-1) || "").trim();
+  const status = ["Approved", "Refunded", "Rejected", "Deleted"].find(item => item.toLowerCase() === rawStatus.toLowerCase()) || "Pending";
 
   if (kind === "Deposit") {
     const amount = Number(decoded[3]);
@@ -238,6 +523,7 @@ function legacyPaymentRequest(value, kind) {
         decoded[4] !== undefined && decoded[4] !== "" && Number.isFinite(balance) && `Balance at request: ${money(balance)}`,
       ].filter(Boolean).join(" · "),
       balanceDeducted: false,
+      status,
     };
   }
 
@@ -257,6 +543,7 @@ function legacyPaymentRequest(value, kind) {
     method: details ? "Withdrawal details" : "Withdrawal",
     details,
     balanceDeducted: true,
+    status,
   };
 }
 
@@ -272,11 +559,13 @@ function normalizeLegacyData(root) {
       name: String(decodeLegacyValue(player.name) || mobile),
       mobile,
       balance: numberFromLegacy(player.bal ?? player.COINS ?? player.B2),
-      played: numberFromLegacy(player.TW ?? player.TD),
+      played: 0,
+      totalAdded: numberFromLegacy(player.TD),
+      totalWithdrawn: numberFromLegacy(player.TW),
       balanceField: Object.prototype.hasOwnProperty.call(player, "bal") ? "bal"
         : Object.prototype.hasOwnProperty.call(player, "COINS") ? "COINS"
           : Object.prototype.hasOwnProperty.call(player, "B2") ? "B2" : "",
-      status: Object.prototype.hasOwnProperty.call(blocked, mobile) ? "Blocked" : "Active",
+      status: isTruthySetting(player.blocked) || isTruthySetting(blocked[mobile]) ? "Blocked" : "Active",
       approved: true,
       joined: "",
     }));
@@ -298,21 +587,41 @@ function normalizeLegacyData(root) {
       }
       const name = String(fields[0] || value).trim();
       const statusValue = String(fields[5] || "");
-      const marketIdentity = `${source}:${name.toLowerCase()}`;
+      let marketMetadata = {};
+      if (typeof fields[8] === "string") {
+        try {
+          const parsed = JSON.parse(fields[8]);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) marketMetadata = parsed;
+        } catch (error) {
+          console.warn(`Could not parse day schedule for legacy market ${source}/${id}:`, error);
+        }
+      } else if (fields[8] && typeof fields[8] === "object" && !Array.isArray(fields[8])) {
+        marketMetadata = fields[8];
+      }
+      const marketIdentity = String(marketMetadata.id || `${source}-${id}`);
+      const defaultDays = marketDaysForSource(source);
+      const days = normalizedMarketDays(marketMetadata.days, defaultDays);
+      const entry = {
+        id: marketIdentity,
+        name,
+        type: marketTypeFromName(name),
+        open: String(fields[1] || ""),
+        close: String(fields[2] || ""),
+        status: /close|stop|off/i.test(statusValue) ? "Closed" : "Open",
+        result: "—",
+        position: numberFromLegacy(fields[7] || id),
+        days,
+        legacyEntries: { [source]: id },
+        legacySource: source,
+        legacyKey: id,
+        legacyFields: fields,
+      };
       if (!marketMap.has(marketIdentity)) {
-        marketMap.set(marketIdentity, {
-          id: `${source}-${id}`,
-          name,
-          type: marketTypeFromName(name),
-          open: String(fields[1] || ""),
-          close: String(fields[2] || ""),
-          status: /close|stop|off/i.test(statusValue) ? "Closed" : "Open",
-          result: "—",
-          position: numberFromLegacy(fields[7] || id),
-          legacySource: source,
-          legacyKey: id,
-          legacyFields: fields,
-        });
+        marketMap.set(marketIdentity, entry);
+      } else {
+        const existing = marketMap.get(marketIdentity);
+        existing.legacyEntries[source] = id;
+        existing.days = normalizedMarketDays([...existing.days, ...days]);
       }
     }
   }
@@ -387,9 +696,10 @@ function normalizeLegacyData(root) {
         mobile,
         kind,
         ...request,
+        legacyValue: decodeLegacyValue(value),
         amount: Number.isFinite(request.amount) ? request.amount : 0,
         created: id.replace(/\s+\d{10,}$/, ""),
-        status: "Pending",
+        status: request.status,
       });
     }
   }
@@ -526,6 +836,33 @@ function normalizeLegacyData(root) {
     }
   }
 
+  const playedByMobile = new Map();
+  for (const bet of legacy.bets) {
+    const mobile = String(bet.mobile || bet.playerId || "");
+    if (/^\d{10,}$/.test(mobile)) {
+      playedByMobile.set(mobile, (playedByMobile.get(mobile) || 0) + (Number(bet.points) || 0));
+    }
+  }
+  for (const player of legacy.players) {
+    player.played = playedByMobile.get(player.mobile) || 0;
+    const walletRecords = sourcePlayers[player.mobile]?.transactions;
+    if (!walletRecords || typeof walletRecords !== "object" || Array.isArray(walletRecords)) continue;
+    for (const [key, rawRecord] of Object.entries(walletRecords)) {
+      const record = decodeLegacyValue(rawRecord);
+      if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+      const transaction = {
+        id: String(record.id || key),
+        player: player.name,
+        mobile: player.mobile,
+        type: String(record.type || "Wallet"),
+        amount: numberFromLegacy(record.amount),
+        date: String(record.date || record.createdAt || ""),
+        note: String(record.note || record.title || record.type || "Wallet activity"),
+      };
+      legacy.transactions.push(transaction);
+    }
+  }
+
   const notice = root.Notice && typeof root.Notice === "object" ? decodeLegacyValue(root.Notice.Notice) : "";
   if (typeof notice === "string" && notice) legacy.settings.noticeMessage = notice;
   const adminSettings = decodeLegacyValue(decodeLegacyValue(root.Admin)?.Admin);
@@ -538,16 +875,21 @@ function normalizeLegacyData(root) {
     legacy.settings.closeBets = adminSettings.EnableCloseBets === undefined
       ? true : /^(true|1|yes|on)$/i.test(String(adminSettings.EnableCloseBets));
     legacy.settings.signUpBonus = numberFromLegacy(adminSettings["Sign Up Bonus"] ?? adminSettings.bonus ?? adminSettings.Bonus);
+    legacy.settings.minimumDeposit = numberFromLegacy(adminSettings.MD);
     legacy.settings.minimumWithdrawal = numberFromLegacy(adminSettings.MW);
     legacy.settings.minimumEntry = numberFromLegacy(adminSettings["Min Entry"]);
     legacy.settings.maximumEntry = numberFromLegacy(adminSettings["Max Entry"]);
     legacy.settings.withdrawTiming = String(decodeLegacyValue(adminSettings["Withdraw Timing"]) || "");
+    legacy.settings.withdrawalWindows = normalizeWithdrawalWindows(adminSettings.WRTiming);
+    legacy.settings.withdrawalWindowsConfigured = adminSettings.WRTiming !== undefined && adminSettings.WRTiming !== null;
     const policy = decodeLegacyValue(adminSettings.Policy);
     legacy.settings.policy = Array.isArray(policy) ? policy.join("\n\n") : String(policy || "");
     legacy.settings.websiteUrl = String(decodeLegacyValue(adminSettings.Website) || "");
     legacy.settings.contactUrl = String(decodeLegacyValue(adminSettings.Contact) || "");
     legacy.settings.telegramUrl = String(decodeLegacyValue(adminSettings.Telegram ?? adminSettings.TG) || "");
-    legacy.settings.resultChartUrl = String(decodeLegacyValue(adminSettings["Market_Reult_chart_Web"]) || "");
+    const configuredResultChartUrl = String(decodeLegacyValue(adminSettings["Market_Reult_chart_Web"]) || "").trim();
+    legacy.settings.resultChartUrl = configuredResultChartUrl && !/^https:\/\/mama567\.bond\/result\.html\/?$/i.test(configuredResultChartUrl)
+      ? configuredResultChartUrl : DEFAULT_RESULT_CHART_URL;
   }
   return legacy;
 }
@@ -567,62 +909,16 @@ function readTodayNewUsers(root) {
     .sort((left, right) => left.tag.localeCompare(right.tag, undefined, { numeric: true }));
 }
 
-function dateKeyToIso(value) {
-  const date = String(value || "");
-  const legacyMatch = date.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (legacyMatch) return `${legacyMatch[3]}-${legacyMatch[2]}-${legacyMatch[1]}`;
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
-}
-
 function readLastSeenByMobile(root) {
   const lastSeen = new Map();
-  const update = (mobile, value, exact = false) => {
+  const update = (mobile, value) => {
     if (!/^\d{10,}$/.test(String(mobile || "")) || value === null || value === undefined || value === "") return;
-    const timestamp = String(value);
-    const dateOnly = dateKeyToIso(timestamp);
-    const normalized = dateOnly || timestamp;
-    const current = lastSeen.get(mobile);
-    if (!current || (exact && !current.exact) || (exact === current.exact && normalized > current.value)) {
-      lastSeen.set(mobile, { value: normalized, exact });
-    }
+    lastSeen.set(mobile, { value: String(value), exact: true });
   };
   const profileRoot = root.DATA && typeof root.DATA === "object" ? root.DATA : {};
   for (const [mobile, profile] of Object.entries(profileRoot)) {
     if (!profile || typeof profile !== "object") continue;
-    const value = profile.lastSeen ?? profile.lastLogin ?? profile.last_seen ?? profile.LastSeen ?? profile.LastLogin ?? profile["Last Seen"];
-    if (value !== undefined) update(mobile, decodeLegacyValue(value), true);
-  }
-
-  const explicit = root["Last Seen"] || root.LastSeen;
-  if (explicit && typeof explicit === "object") {
-    for (const [mobile, rawValue] of Object.entries(explicit)) {
-      const value = decodeLegacyValue(rawValue);
-      const timestamp = value && typeof value === "object"
-        ? value.lastSeen ?? value.lastLogin ?? value.timestamp ?? value.time
-        : value;
-      update(mobile, timestamp, true);
-    }
-  }
-
-  const usersByDate = root["New Users"];
-  if (usersByDate && typeof usersByDate === "object" && !Array.isArray(usersByDate)) {
-    for (const [dateKey, users] of Object.entries(usersByDate)) {
-      const isoDate = dateKeyToIso(dateKey);
-      if (!isoDate || !users || typeof users !== "object" || Array.isArray(users)) continue;
-      for (const [tag, rawValue] of Object.entries(users)) {
-        if (tag === "x" || rawValue === null || rawValue === undefined) continue;
-        const value = decodeLegacyValue(rawValue);
-        const candidates = [tag];
-        const collect = (item) => {
-          if (typeof item === "string" || typeof item === "number") candidates.push(String(item));
-          else if (Array.isArray(item)) item.forEach(collect);
-          else if (item && typeof item === "object") Object.values(item).forEach(collect);
-        };
-        collect(value);
-        const mobiles = new Set(candidates.map((item) => item.replace(/\D/g, "")).filter((item) => /^\d{10,}$/.test(item)));
-        for (const mobile of mobiles) update(mobile, isoDate);
-      }
-    }
+    if (profile["Last Seen"] !== undefined) update(mobile, decodeLegacyValue(profile["Last Seen"]));
   }
   return lastSeen;
 }
@@ -677,7 +973,21 @@ function mergeLiveData(root) {
     }
     return Array.from(records.values());
   };
-  merged.players = mergeRecords(legacy.players, Array.isArray(adminData.players) ? adminData.players : []);
+  merged.players = mergeRecords(legacy.players, Array.isArray(adminData.players) ? adminData.players : [])
+    .map(player => {
+      const legacyPlayer = legacy.players.find(item => item.id === player.id);
+      if (!legacyPlayer) return player;
+      const profile = root.DATA?.[player.mobile];
+      return {
+        ...legacyPlayer,
+        ...player,
+        played: legacyPlayer.played,
+        totalAdded: profile && Object.prototype.hasOwnProperty.call(profile, "TD")
+          ? legacyPlayer.totalAdded : Number.isFinite(Number(player.totalAdded)) ? Number(player.totalAdded) : legacyPlayer.totalAdded,
+        totalWithdrawn: profile && Object.prototype.hasOwnProperty.call(profile, "TW")
+          ? legacyPlayer.totalWithdrawn : Number.isFinite(Number(player.totalWithdrawn)) ? Number(player.totalWithdrawn) : legacyPlayer.totalWithdrawn,
+      };
+    });
   merged.markets = mergeRecords(legacy.markets, Array.isArray(adminData.markets) ? adminData.markets : []);
   const adminMarkets = new Map((Array.isArray(adminData.markets) ? adminData.markets : []).map((market) => [market.id, market]));
   for (const market of merged.markets) {
@@ -693,6 +1003,14 @@ function mergeLiveData(root) {
   merged.requests = mergeRecords(legacy.requests, Array.isArray(adminData.requests) ? adminData.requests : [], true);
   merged.transactions = mergeRecords(legacy.transactions, Array.isArray(adminData.transactions) ? adminData.transactions : [], true);
   merged.bets = mergeRecords(legacy.bets, Array.isArray(adminData.bets) ? adminData.bets : [], true);
+  const playedByMobile = new Map();
+  for (const bet of merged.bets) {
+    const mobile = String(bet.mobile || bet.playerId || "");
+    if (/^\d{10,}$/.test(mobile)) {
+      playedByMobile.set(mobile, (playedByMobile.get(mobile) || 0) + (Number(bet.points) || 0));
+    }
+  }
+  for (const player of merged.players) player.played = playedByMobile.get(player.mobile) || 0;
 
   if (!Array.isArray(adminData.players) && !legacy.players.length) merged.players = [];
   if (!Array.isArray(adminData.markets) && !legacy.markets.length) merged.markets = [];
@@ -711,6 +1029,9 @@ function mergeLiveData(root) {
       merged.settings[key] = value;
     }
   }
+  if (/^https:\/\/mama567\.bond\/result\.html\/?$/i.test(String(merged.settings.resultChartUrl || "").trim())) {
+    merged.settings.resultChartUrl = DEFAULT_RESULT_CHART_URL;
+  }
   return normalizeData(merged);
 }
 
@@ -723,10 +1044,13 @@ let lastSyncedData = null;
 let lastPersistPromise = Promise.resolve(true);
 let databaseRef;
 let databaseRootRef;
+let adminCredentialRef;
+let adminCredentialFingerprint = "";
 let adminAuthenticated = false;
 let loginInProgress = false;
 let currentPage = "dashboard";
 let requestFilter = "All";
+const requestsInProgress = new Set();
 let playerQuery = "";
 let playerStatusFilter = "All";
 let transactionQuery = "";
@@ -758,6 +1082,32 @@ function normalizedAdminPassword(value) {
   return decoded === null || decoded === undefined ? "" : String(decoded);
 }
 
+async function adminPasswordFingerprint(value) {
+  if (!globalThis.crypto?.subtle) throw new Error("Secure sign-in verification is unavailable in this browser.");
+  const bytes = new TextEncoder().encode(normalizedAdminPassword(value));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function appsScriptEndpointFromWebId(value) {
+  const webId = normalizedAdminPassword(value).trim();
+  if (!webId) return "";
+  if (/^https:\/\//i.test(webId)) {
+    try {
+      const url = new URL(webId);
+      return url.protocol === "https:" && url.hostname === "script.google.com"
+        && /^\/macros\/s\/[^/]+\/exec$/.test(url.pathname) && !url.search && !url.hash
+        ? url.href
+        : "";
+    } catch {
+      return "";
+    }
+  }
+  return /^[A-Za-z0-9_-]+$/.test(webId)
+    ? `https://script.google.com/macros/s/${webId}/exec`
+    : "";
+}
+
 async function verifyAdminLogin(phone, password) {
   if (typeof firebase === "undefined") throw new Error("Sign-in is temporarily unavailable. Check your connection and try again.");
   if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -774,6 +1124,11 @@ async function verifyAdminLogin(phone, password) {
   if (normalizedAdminPhone(phone) !== expectedPhone || normalizedAdminPassword(password) !== expectedPassword) {
     throw new Error("Phone number or password is incorrect.");
   }
+  return {
+    endpoint: appsScriptEndpointFromWebId(credentials.webid),
+    token: normalizedAdminPassword(credentials.tokenid).trim(),
+    credentialFingerprint: await adminPasswordFingerprint(expectedPassword),
+  };
 }
 
 function setAdminAppVisible(visible) {
@@ -782,10 +1137,40 @@ function setAdminAppVisible(visible) {
   document.getElementById("admin-app").hidden = !visible;
 }
 
-function signOutAdmin() {
+function monitorAdminPassword(fingerprint) {
+  if (adminCredentialRef) adminCredentialRef.off();
+  adminCredentialFingerprint = fingerprint;
+  adminCredentialRef = firebase.database().ref("Admin/Admin/PassAdmin");
+  adminCredentialRef.on("value", async (snapshot) => {
+    if (!adminAuthenticated || !adminCredentialFingerprint) return;
+    try {
+      const currentFingerprint = await adminPasswordFingerprint(snapshot.val());
+      if (currentFingerprint !== adminCredentialFingerprint) {
+        signOutAdmin("The admin password changed. Sign in again with the new password.");
+      }
+    } catch (error) {
+      toast(`Could not verify the admin password change listener: ${error.message}`, true);
+      signOutAdmin("Password-change monitoring failed. Sign in again.");
+    }
+  }, (error) => {
+    toast(`Could not monitor admin password changes: ${error.message}`, true);
+    signOutAdmin("Password-change monitoring is unavailable. Sign in again.");
+  });
+}
+
+function signOutAdmin(message = "") {
+  if (adminCredentialRef) adminCredentialRef.off();
+  adminCredentialRef = undefined;
+  adminCredentialFingerprint = "";
   if (databaseRootRef) databaseRootRef.off();
   databaseRef = undefined;
   databaseRootRef = undefined;
+  adminExpertGuessing = {};
+  adminExpertGuessingLoaded = false;
+  adminExpertGuessingLoadInProgress = false;
+  adminExpertGuessingSeedInProgress = false;
+  withdrawalWindowsSeedStarted = false;
+  generatedExpertGuessing.clear();
   lastSyncedData = null;
   data = createEmptyData();
   todayLoginCount = 0;
@@ -794,8 +1179,8 @@ function signOutAdmin() {
   lastSeenByMobile = new Map();
   currentPage = "dashboard";
   localStorage.removeItem(ADMIN_SESSION_KEY);
+  localStorage.removeItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  sessionStorage.removeItem(BROADCAST_TOKEN_KEY);
   document.getElementById("sidebar").classList.remove("open");
   document.querySelector(".mobile-menu").setAttribute("aria-expanded", "false");
   document.getElementById("modal-root").innerHTML = "";
@@ -803,6 +1188,7 @@ function signOutAdmin() {
   setAdminAppVisible(false);
   document.getElementById("admin-login-form").reset();
   document.getElementById("admin-login-error").textContent = "";
+  if (message) document.getElementById("admin-login-error").textContent = message;
   document.getElementById("admin-phone").focus();
 }
 
@@ -832,6 +1218,7 @@ function legacyUpdatesFor(changed, previous) {
     ["openBets", "EnableOpenBets"],
     ["closeBets", "EnableCloseBets"],
     ["signUpBonus", "Sign Up Bonus"],
+    ["minimumDeposit", "MD"],
     ["minimumWithdrawal", "MW"],
     ["minimumEntry", "Min Entry"],
     ["maximumEntry", "Max Entry"],
@@ -847,6 +1234,11 @@ function legacyUpdatesFor(changed, previous) {
       updates[`Admin/Admin/${key}`] = String(changed.settings[property] ?? "");
     }
   }
+  if (changed.settings &&
+      (!oldSettings.withdrawalWindowsConfigured ||
+       JSON.stringify(changed.settings.withdrawalWindows) !== JSON.stringify(oldSettings.withdrawalWindows))) {
+    updates["Admin/Admin/WRTiming"] = changed.settings.withdrawalWindows;
+  }
   if (Array.isArray(changed.players)) {
     const previousPlayers = new Map((previous.players || []).map((player) => [player.id, player]));
     for (const player of changed.players) {
@@ -856,8 +1248,19 @@ function legacyUpdatesFor(changed, previous) {
       if (player.balance !== oldPlayer.balance && player.balanceField) {
         updates[`DATA/${player.mobile}/${player.balanceField}`] = String(player.balance);
       }
+      if (player.totalAdded !== oldPlayer.totalAdded) updates[`DATA/${player.mobile}/TD`] = String(player.totalAdded || 0);
+      if (player.totalWithdrawn !== oldPlayer.totalWithdrawn) updates[`DATA/${player.mobile}/TW`] = String(player.totalWithdrawn || 0);
       if (player.status !== oldPlayer.status) {
-        updates[`Blocked/${player.mobile}`] = player.status === "Blocked" ? true : null;
+        const blocked = player.status === "Blocked";
+        updates[`DATA/${player.mobile}/blocked`] = blocked ? "yes" : "no";
+        updates[`Blocked/${player.mobile}`] = blocked ? true : null;
+      }
+    }
+    if (Array.isArray(changed.transactions)) {
+      const previousTransactionIds = new Set((previous.transactions || []).map(transaction => transaction.id));
+      for (const transaction of changed.transactions) {
+        if (!transaction.id || previousTransactionIds.has(transaction.id) || !/^\d{10,}$/.test(String(transaction.mobile || ""))) continue;
+        updates[`DATA/${transaction.mobile}/transactions/${safeMarkerKey(transaction.id)}`] = transaction;
       }
     }
   }
@@ -866,24 +1269,28 @@ function legacyUpdatesFor(changed, previous) {
     for (const request of previous.requests || []) {
       const match = request.id.match(/^(WR|DR)-(.+)$/);
       const updated = currentRequests.get(request.id);
-      if (match && updated && updated.status !== "Pending") updates[`${match[1]}/${match[2]}`] = null;
+      if (match && updated && updated.status !== request.status && Array.isArray(request.legacyValue)) {
+        const fields = request.legacyValue.slice();
+        fields[fields.length - 1] = updated.status;
+        updates[`${match[1]}/${match[2]}`] = JSON.stringify(fields);
+      }
     }
   }
   if (Array.isArray(changed.markets)) {
     const currentMarkets = new Map(changed.markets.map((market) => [market.id, market]));
     for (const oldMarket of previous.markets || []) {
       const currentMarket = currentMarkets.get(oldMarket.id);
-      if (oldMarket.legacySource && (!currentMarket
-        || currentMarket.legacySource !== oldMarket.legacySource
-        || currentMarket.legacyKey !== oldMarket.legacyKey)) {
-        updates[`${oldMarket.legacySource}/${oldMarket.legacyKey}`] = null;
+      const previousEntries = marketLegacyEntries(oldMarket);
+      const currentEntries = currentMarket ? marketLegacyEntries(currentMarket) : {};
+      for (const [source, key] of Object.entries(previousEntries)) {
+        if (currentEntries[source] !== key) updates[`${source}/${key}`] = null;
       }
     }
     for (const market of changed.markets) {
-      if (!market.legacySource || !market.legacyKey || !Array.isArray(market.legacyFields)) continue;
+      const entries = marketLegacyEntries(market);
+      if (!Object.keys(entries).length || !Array.isArray(market.legacyFields)) continue;
       const oldMarket = (previous.markets || []).find((item) => item.id === market.id);
-      if (oldMarket && oldMarket.legacySource === market.legacySource
-        && oldMarket.legacyKey === market.legacyKey
+      if (oldMarket
         && JSON.stringify(market) === JSON.stringify(oldMarket)) continue;
       const fields = market.legacyFields.slice();
       fields[0] = market.name;
@@ -892,7 +1299,10 @@ function legacyUpdatesFor(changed, previous) {
       fields[5] = market.status === "Open" ? "Running" : "Stop";
       if (market.result && market.result !== "—") fields[6] = market.result;
       fields[7] = String(market.position);
-      updates[`${market.legacySource}/${market.legacyKey}`] = JSON.stringify(fields);
+      fields[8] = JSON.stringify({ id: market.id, days: normalizedMarketDays(market.days) });
+      for (const [source, key] of Object.entries(entries)) {
+        updates[`${source}/${key}`] = JSON.stringify(fields);
+      }
     }
     const previousMarkets = new Map((previous.markets || []).map((market) => [market.id, market]));
     for (const market of changed.markets) {
@@ -974,7 +1384,8 @@ function toast(message, isError = false) {
   window.setTimeout(() => item.remove(), 3300);
 }
 
-function pendingRequests() {
+function pendingRequests(kind) {
+  if (kind) return data.requests.filter((request) => request.kind === kind && request.status === "Pending").length;
   return data.requests.filter((request) => request.status === "Pending").length;
 }
 
@@ -982,7 +1393,11 @@ function setNav() {
   const root = document.getElementById("navigation");
   root.innerHTML = navigation.map((item) => {
     if (item.section) return `<div class="nav-section">${item.section}</div>`;
-    const count = item.count === "pending" ? pendingRequests() : item.count;
+    const count = item.count === "deposit-pending"
+      ? pendingRequests("Deposit")
+      : item.count === "withdrawal-pending"
+        ? pendingRequests("Withdrawal")
+        : item.count;
     return `<button class="nav-link${currentPage === item.id ? " active" : ""}" data-page="${item.id}"><span class="nav-icon">${item.icon}</span>${item.label}${count ? `<span class="nav-count">${count}</span>` : ""}</button>`;
   }).join("");
 }
@@ -1021,16 +1436,24 @@ function activityRows() {
 function dashboardPage() {
   const balance = data.players.reduce((sum, player) => sum + Number(player.balance || 0), 0);
   const added = data.transactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0);
+  const withdrawn = Math.abs(data.transactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
   const waiting = pendingRequests();
   const active = data.players.filter((player) => player.status === "Active").length;
-  const today = new Date().toLocaleDateString("en-CA");
-  return `${pageHeading("Dashboard", "Your Kalyan Gold operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
+  const today = localDateKey();
+  const todayBets = data.bets.filter((bet) => resultDateForBid(bet) === today);
+  const playedToday = todayBets.reduce((sum, bet) => sum + (Number(bet.points) || 0), 0);
+  const winners = allPublishedWinners();
+  const winningAmount = winners.reduce((sum, winner) => sum + winner.winningAmount, 0);
+  return `${pageHeading("Dashboard", "Your A2 MORNING operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
     <div class="grid stats-grid">
       <article class="stat-card"><div class="stat-top"><span>Total players</span><span class="stat-icon">♙</span></div><div class="stat-value">${data.players.length}</div><div class="stat-foot"><span class="up">${active} active</span> · ${data.players.length - active} blocked</div></article>
       <article class="stat-card"><div class="stat-top"><span>Today's logins</span><span class="stat-icon">↗</span></div><div class="stat-value">${todayLoginCount}</div><div class="stat-foot">New users · <button class="panel-link" data-page="new-users">View users →</button></div></article>
       <article class="stat-card"><div class="stat-top"><span>Wallet balances</span><span class="stat-icon">₹</span></div><div class="stat-value">${money(balance)}</div><div class="stat-foot">Across all player accounts</div></article>
       <article class="stat-card"><div class="stat-top"><span>Pending requests</span><span class="stat-icon">⇄</span></div><div class="stat-value">${waiting}</div><div class="stat-foot">${waiting ? "Needs your review" : "All requests reviewed"}</div></article>
       <article class="stat-card"><div class="stat-top"><span>Total added</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(added)}</div><div class="stat-foot">${data.transactions.filter((item) => item.type === "Added" && item.date.startsWith(today)).length} credits today</div></article>
+      <article class="stat-card"><div class="stat-top"><span>Total withdrawn</span><span class="stat-icon">↘</span></div><div class="stat-value">${money(withdrawn)}</div><div class="stat-foot">Completed wallet withdrawals</div></article>
+      <article class="stat-card"><div class="stat-top"><span>Today played amount</span><span class="stat-icon">▦</span></div><div class="stat-value">${money(playedToday)}</div><div class="stat-foot">${todayBets.length} bid${todayBets.length === 1 ? "" : "s"} today · <button class="panel-link" data-page="played">View bids →</button></div></article>
+      <article class="stat-card"><div class="stat-top"><span>Total winning amount</span><span class="stat-icon">★</span></div><div class="stat-value">${money(winningAmount)}</div><div class="stat-foot">${winners.length} winning bid${winners.length === 1 ? "" : "s"} · <button class="panel-link" data-page="winners">View winners →</button></div></article>
     </div>
     <div class="grid overview-grid">
       <section class="panel"><div class="panel-head"><div><h2>Market overview</h2><p>Current market status and latest results</p></div><button class="panel-link" data-page="markets">View all markets →</button></div><div class="market-list">${marketRows()}</div></section>
@@ -1038,9 +1461,11 @@ function dashboardPage() {
     </div>
     <section class="quick-section"><div class="section-heading"><h2>Quick access</h2><span>Manage your admin tools</span></div><div class="grid quick-grid">
       ${iconCard("players", "Players", "Search & manage", "players")}
-      ${iconCard("requests", "Payment requests", `${waiting} awaiting review`, "requests")}
+      ${iconCard("requests", "Deposit requests", `${data.requests.filter(request => request.kind === "Deposit" && request.status === "Pending").length} awaiting review`, "deposit-requests")}
+      ${iconCard("withdraw", "Withdrawal requests", `${data.requests.filter(request => request.kind === "Withdrawal" && request.status === "Pending").length} awaiting review`, "withdrawal-requests")}
       ${iconCard("markets", "Markets & games", "Schedules & status", "markets")}
       ${iconCard("results", "Update results", "Publish market results", "results")}
+      ${iconCard("winners", "Winners", "Review winning bids", "winners")}
       ${iconCard("rates", "Change rates", "Game payout chart", "rates")}
       ${iconCard("notices", "Send notice", "Update player message", "notices")}
       ${iconCard("transactions", "Transactions", "Wallet history", "transactions")}
@@ -1054,9 +1479,9 @@ function dashboardPage() {
 
 function playerTable(rows) {
   if (!rows.length) return `<div class="empty-state">No players match your search.</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>Balance</th><th>Played</th><th>Joined</th><th>Last seen</th><th>Status</th><th>Game access</th><th>Actions</th></tr></thead><tbody>${rows.map((player) => `<tr>
+  return `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>Balance</th><th>Added</th><th>Withdrawn</th><th>Played</th><th>Joined</th><th>Last seen</th><th>Status</th><th>Game access</th><th>Actions</th></tr></thead><tbody>${rows.map((player) => `<tr>
     <td><div class="table-primary"><span class="user-avatar">${escapeHtml(player.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(player.name)}</strong><small>${player.approved ? "Approved account" : "Awaiting approval"}</small></span></div></td>
-    <td>${escapeHtml(player.mobile)}</td><td><strong>${money(player.balance)}</strong></td><td>${money(player.played)}</td><td>${dateLabel(player.joined)}</td><td>${escapeHtml(lastSeenLabel(player.mobile))}</td><td>${statusTag(player.status)}</td><td>${gameAccessLabel(player.mobile)}</td>
+    <td>${escapeHtml(player.mobile)}</td><td><strong>${money(player.balance)}</strong></td><td>${money(player.totalAdded)}</td><td>${money(player.totalWithdrawn)}</td><td>${money(player.played)}</td><td>${dateLabel(player.joined)}</td><td>${escapeHtml(lastSeenLabel(player.mobile))}</td><td>${statusTag(player.status)}</td><td>${gameAccessLabel(player.mobile)}</td>
     <td><div class="actions-cell">${whatsappLink(player.mobile)}<button class="button small" data-action="edit-player" data-id="${escapeHtml(player.id)}" title="Edit player">Edit</button><button class="button small" data-action="player-credit" data-id="${escapeHtml(player.id)}" title="Add or withdraw points">₹</button><button class="button small ${player.status === "Blocked" ? "success" : "danger"}" data-action="toggle-player" data-id="${escapeHtml(player.id)}">${player.status === "Blocked" ? "Unblock" : "Block"}</button></div></td>
   </tr>`).join("")}</tbody></table></div>`;
 }
@@ -1093,9 +1518,36 @@ function requestsPage() {
     ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Last seen</th><th>Request</th><th>Amount</th><th>Method &amp; details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map((request) => `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0])}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile)}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td>${escapeHtml(request.kind)}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created)}</td><td>${statusTag(request.status)}</td><td>${request.status === "Pending" ? `<div class="actions-cell"><button class="button small success" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Approved" ${request.amountUnavailable ? "disabled title=\"Legacy request amount is not mapped\"" : ""}>Approve</button>${request.kind === "Withdrawal" ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${request.amountUnavailable || (request.balanceDeducted && !data.players.some((player) => player.mobile === request.mobile)) ? "disabled title=\"Player or refund amount is unavailable\"" : ""}>Refund</button>` : `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Rejected">Reject</button>`}<button class="button small" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Deleted">Delete</button></div>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No requests match this filter.</div>`}</section>`;
 }
 
+function requestKindPage(kind) {
+  const label = kind === "Deposit" ? "Deposit" : "Withdrawal";
+  const rows = data.requests
+    .filter(request => request.kind === kind)
+    .filter(request => requestFilter === "All" || request.status === requestFilter)
+    .filter(request => `${request.player} ${request.mobile} ${request.method} ${request.details || ""}`.toLowerCase().includes(requestQuery.toLowerCase()));
+  const subtitle = kind === "Deposit"
+    ? "Review UPI payments and approve verified requests to credit points."
+    : "Review withdrawal requests. Submitted withdrawals reserve points; refunds restore them.";
+  const rowsMarkup = rows.map(request => {
+    const busy = requestsInProgress.has(request.id);
+    const approval = kind === "Deposit" ? "Approve & credit" : "Approve";
+    const controls = request.status !== "Pending" ? "—" : `<div class="actions-cell">
+      <button class="button small success" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Approved" ${busy || request.amountUnavailable ? "disabled" : ""}>${busy ? "Processing…" : approval}</button>
+      ${kind === "Withdrawal"
+        ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${busy || request.amountUnavailable || (request.balanceDeducted && !data.players.some(player => player.mobile === request.mobile)) ? "disabled" : ""}>Refund</button>`
+        : `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Rejected" ${busy ? "disabled" : ""}>Reject</button>`}
+    </div>`;
+    return `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0] || "?")}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile || "—")}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created)}</td><td>${statusTag(request.status)}</td><td>${controls}</td></tr>`;
+  }).join("");
+  return `${pageHeading(`${label} requests`, subtitle, button("＋ Add points manually", "manual-payment", "primary"))}
+    <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="request-search" class="field" type="search" placeholder="Search player, mobile, or payment details..." value="${escapeHtml(requestQuery)}"></div><select id="request-filter" class="select">${["All", "Pending", "Approved", "Refunded", "Rejected", "Deleted"].map(value => `<option${value === requestFilter ? " selected" : ""}>${value}</option>`).join("")}</select><span class="stat-foot">${rows.length} ${label.toLowerCase()} request${rows.length === 1 ? "" : "s"}</span></div>
+    ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Last seen</th><th>Amount</th><th>Payment details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead><tbody>${rowsMarkup}</tbody></table></div>` : `<div class="empty-state">No ${label.toLowerCase()} requests match this filter.</div>`}</section>`;
+}
+
 function marketsPage() {
   return `${pageHeading("Markets & games", "Manage market schedules, open/close status, and results.", button("＋ Add market", "add-market", "primary"))}
-    <div class="grid two-col">${data.markets.map((market) => `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${escapeHtml(market.result || "—")}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`).join("") || `<div class="panel empty-state">No markets added yet.</div>`}</div>`;
+    <div class="grid two-col">${[...data.markets].sort((left, right) =>
+      String(left.legacySource || "GAMES").localeCompare(String(right.legacySource || "GAMES")) || Number(left.position) - Number(right.position) || left.name.localeCompare(right.name)
+    ).map((market) => `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)} · ${escapeHtml(marketDaysLabel(market.days || marketDaysForSource(market.legacySource || "GAMES")))}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${escapeHtml(market.result || "—")}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`).join("") || `<div class="panel empty-state">No markets added yet.</div>`}</div>`;
 }
 
 function resultsPage() {
@@ -1202,6 +1654,53 @@ function playedPage() {
   return `${pageHeading("Bid history & played games", "Choose a market to see every player who bid in it, then search or narrow by player.", button("Player list", "go-players"))}<section class="panel"><div class="panel-head"><div><h2>${playedMarketFilter === "All" ? "All market bids" : `${escapeHtml(playedMarketFilter)} bids`}</h2><p>${playersShown} player${playersShown === 1 ? "" : "s"} · ${rows.length} bid${rows.length === 1 ? "" : "s"} shown</p></div></div>${marketFilters}<div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="played-search" class="field" type="search" placeholder="Search player, mobile, market, or number..." value="${escapeHtml(playedQuery)}"></div><select id="played-player-filter" class="select"><option value="All">All players</option>${playedPlayers.map((player) => `<option value="${escapeHtml(player.id)}"${playedPlayerFilter === player.id ? " selected" : ""}>${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("")}</select></div>${table}</section>`;
 }
 
+function allPublishedWinners() {
+  const winnerMap = new Map();
+  for (const market of data.markets) {
+    for (const published of market.results || []) {
+      const rawSession = String(published.session || "").toLowerCase();
+      const session = rawSession === "open" ? "Open" : rawSession === "close" ? "Close" : "";
+      if (!session || !published.date || !published.result) continue;
+      for (const winner of resultWinners(market, published.result, published.date, session)) {
+        const key = `${market.id}|${published.date}|${session}|${winner.id}`;
+        if (!winnerMap.has(key)) winnerMap.set(key, { ...winner, market: market.name, date: published.date, session });
+      }
+    }
+  }
+  return Array.from(winnerMap.values())
+    .sort((left, right) => right.date.localeCompare(left.date)
+      || left.market.localeCompare(right.market)
+      || left.selection.localeCompare(right.selection));
+}
+
+function winnersPage() {
+  const winners = allPublishedWinners();
+  const total = winners.reduce((sum, winner) => sum + winner.winningAmount, 0);
+  const distributedIds = new Set(data.settlements.flatMap(settlement =>
+    (settlement.winners || []).flatMap(player => player.betIds || [])
+  ));
+  const rows = winners.map(winner => `<tr>
+    <td>${escapeHtml(winner.date)}</td>
+    <td>${escapeHtml(winner.market)}</td>
+    <td>${escapeHtml(winner.session)}</td>
+    <td><div class="table-primary"><span class="user-avatar">${escapeHtml(winner.player[0] || "?")}</span><span><strong>${escapeHtml(winner.player)}</strong><small>${escapeHtml(winner.mobile || "—")}</small></span></div></td>
+    <td>${escapeHtml(winner.type)}</td>
+    <td><strong>${escapeHtml(winner.selection)}</strong></td>
+    <td>${money(winner.points)}</td>
+    <td><strong>${money(winner.winningAmount)}</strong></td>
+    <td>${distributedIds.has(winner.id) ? `<span class="status approved">Distributed</span>` : "Not distributed"}</td>
+  </tr>`).join("");
+  return `${pageHeading("Winners", "Winning bids are calculated from published market results and the current rate chart.")}
+    <div class="grid three-col" style="margin-bottom:15px">
+      <div class="panel metric-mini"><span>Total winning bids</span><strong>${winners.length}</strong></div>
+      <div class="panel metric-mini"><span>Total winning amount</span><strong>${money(total)}</strong></div>
+      <div class="panel metric-mini"><span>Published results</span><strong>${data.markets.reduce((sum, market) => sum + (market.results || []).filter(result => ["Open", "Close"].includes(result.session) && result.result).length, 0)}</strong></div>
+    </div>
+    <section class="panel"><div class="panel-head"><div><h2>Winning bid history</h2><p>Only bids matching a published result and a configured rate are included.</p></div><button class="button" data-page="results">Update results</button></div>
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Market</th><th>Session</th><th>Player</th><th>Game</th><th>Number</th><th>Bid points</th><th>Winning amount</th><th>Distribution</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No winning bids are available for published results yet.</div>`}
+    </section>`;
+}
+
 function reportsPage() {
   const balance = data.players.reduce((sum, player) => sum + Number(player.balance || 0), 0);
   const totalAdded = data.transactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0);
@@ -1218,15 +1717,26 @@ function reportsPage() {
 }
 
 function noticesPage() {
-  const senderReady = Boolean(sessionStorage.getItem(BROADCAST_TOKEN_KEY));
+  const senderReady = Boolean(
+    localStorage.getItem(BROADCAST_ENDPOINT_KEY) && localStorage.getItem(BROADCAST_TOKEN_KEY)
+  );
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
     <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Google Apps Script sender</h2><p>${senderReady ? "Sender configured for this admin session." : "Configure the deployed Apps Script URL and broadcast token to enable push delivery."}</p></div><button class="button" type="button" data-action="configure-broadcast">Configure sender</button></div><p class="hint">Market result updates and notice changes will be sent to all OneSignal subscribers.</p></section>`;
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Google Apps Script sender</h2><p>${senderReady ? "Sender settings saved in this browser." : "Configure the deployed Apps Script URL and broadcast token to enable push delivery."}</p></div><button class="button" type="button" data-action="configure-broadcast">Configure sender</button></div><p class="hint">Market result updates and notice changes will be sent to all OneSignal subscribers.</p></section>`;
 }
 
 function settingsPage() {
   const settings = data.settings;
   const line = (key, title, description) => `<div class="settings-row"><div><strong>${title}</strong><small>${description}</small></div><input class="toggle" type="checkbox" data-setting="${key}" ${settings[key] ? "checked" : ""}></div>`;
+  const guessingMarkets = uniqueGuessingMarkets();
+  const guessingInputs = guessingMarkets.map((market, index) => {
+    const guess = adminGuessingMarket(market.name) || defaultAdminGuess(market.name);
+    return `<article class="expert-admin-market"><h3>${escapeHtml(market.name)}</h3><div class="form-grid">
+      <div class="form-field"><label for="guess-${index}-ank">ANK</label><input id="guess-${index}-ank" class="field" name="guess-${index}-ank" maxlength="80" value="${escapeHtml(displayGuessNumbers(guess.ank))}" placeholder="2 - 0 - 6 - 8"></div>
+      <div class="form-field"><label for="guess-${index}-jodi">JODI</label><input id="guess-${index}-jodi" class="field" name="guess-${index}-jodi" maxlength="120" value="${escapeHtml(displayGuessNumbers(guess.jodi))}" placeholder="21 - 29 - 06 - 05"></div>
+      <div class="form-field full"><label for="guess-${index}-panna">PANNA</label><input id="guess-${index}-panna" class="field" name="guess-${index}-panna" maxlength="160" value="${escapeHtml(displayGuessNumbers(guess.panna))}" placeholder="255 - 444 - 226 - 145"></div>
+    </div></article>`;
+  }).join("");
   return `${pageHeading("Game settings", "Manage player website settings, maintenance, and game availability.")}
     <div class="grid overview-grid"><section class="panel"><div class="panel-head"><div><h2>Platform controls</h2><p>Availability settings are synced to the player website.</p></div></div>
       ${line("maintenance", "Maintenance mode", "Show the service as unavailable to players.")}
@@ -1241,22 +1751,31 @@ function settingsPage() {
     <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Player website configuration</h2></div></div>
       <form id="player-settings-form"><div class="form-grid">
         <div class="form-field"><label for="signup-bonus">Sign-up bonus (points)</label><input id="signup-bonus" class="field" name="signUpBonus" type="number" min="0" step="0.01" value="${escapeHtml(settings.signUpBonus)}" required></div>
+        <div class="form-field"><label for="minimum-deposit">Minimum deposit (₹)</label><input id="minimum-deposit" class="field" name="minimumDeposit" type="number" min="0" step="1" value="${escapeHtml(settings.minimumDeposit)}" required><div class="hint">Configured at Admin/Admin/MD. This admin setting is not applied by the player app.</div></div>
         <div class="form-field"><label for="minimum-withdrawal">Minimum withdrawal (₹)</label><input id="minimum-withdrawal" class="field" name="minimumWithdrawal" type="number" min="0" step="1" value="${escapeHtml(settings.minimumWithdrawal)}" required></div>
         <div class="form-field"><label for="minimum-entry">Minimum bid points</label><input id="minimum-entry" class="field" name="minimumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.minimumEntry)}" required><div class="hint">Minimum points for each number; 0 disables the limit.</div></div>
         <div class="form-field"><label for="maximum-entry">Maximum bid points</label><input id="maximum-entry" class="field" name="maximumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.maximumEntry)}" required><div class="hint">Maximum points for each number; 0 disables the limit.</div></div>
         <div class="form-field full"><label for="withdraw-timing">Withdrawal timing message</label><input id="withdraw-timing" class="field" name="withdrawTiming" maxlength="120" value="${escapeHtml(settings.withdrawTiming)}" placeholder="For example: Withdrawals are processed 24/7"></div>
+        <div class="form-field full"><strong>Withdrawal request hours</strong><div class="hint">Player requests are accepted only during these two daily windows. Saving creates or updates Admin/Admin/WRTiming.</div></div>
+        <div class="form-field"><label for="withdraw-morning-open">Morning open time</label><input id="withdraw-morning-open" class="field" name="morningOpen" type="time" value="${escapeHtml(settings.withdrawalWindows.morning.open)}" required></div>
+        <div class="form-field"><label for="withdraw-morning-close">Morning close time</label><input id="withdraw-morning-close" class="field" name="morningClose" type="time" value="${escapeHtml(settings.withdrawalWindows.morning.close)}" required></div>
+        <div class="form-field"><label for="withdraw-evening-open">Evening open time</label><input id="withdraw-evening-open" class="field" name="eveningOpen" type="time" value="${escapeHtml(settings.withdrawalWindows.evening.open)}" required></div>
+        <div class="form-field"><label for="withdraw-evening-close">Evening close time</label><input id="withdraw-evening-close" class="field" name="eveningClose" type="time" value="${escapeHtml(settings.withdrawalWindows.evening.close)}" required></div>
         <div class="form-field"><label for="player-website-url">Results website URL</label><input id="player-website-url" class="field" name="websiteUrl" type="text" value="${escapeHtml(settings.websiteUrl)}" placeholder="https://example.com"></div>
-        <div class="form-field"><label for="result-chart-url">Market result chart URL</label><input id="result-chart-url" class="field" name="resultChartUrl" type="text" value="${escapeHtml(settings.resultChartUrl)}" placeholder="https://example.com/results"></div>
+        <div class="form-field"><label for="result-chart-url">Market result chart URL</label><input id="result-chart-url" class="field" name="resultChartUrl" type="url" value="${escapeHtml(settings.resultChartUrl)}" placeholder="${escapeHtml(DEFAULT_RESULT_CHART_URL)}"></div>
         <div class="form-field"><label for="support-contact-url">WhatsApp support URL</label><input id="support-contact-url" class="field" name="contactUrl" type="text" value="${escapeHtml(settings.contactUrl)}" placeholder="https://wa.me/91..."></div>
         <div class="form-field"><label for="telegram-url">Telegram URL</label><input id="telegram-url" class="field" name="telegramUrl" type="text" value="${escapeHtml(settings.telegramUrl)}" placeholder="https://t.me/..."></div>
         <div class="form-field full"><label for="player-policy">Privacy policy</label><textarea id="player-policy" class="textarea" name="policy" rows="5" maxlength="8000">${escapeHtml(settings.policy)}</textarea></div>
       </div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Save player website settings</button></div></form>
+    </section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Expert guessing numbers</h2><p>Manage the separate web-result Firebase database at ExpertGuessing/&lt;market&gt;. Missing markets are seeded with editable random ANK, JODI, and PANNA values. Players see saved numbers only after tapping to unlock and scratching.</p></div><button class="button primary" type="button" data-action="add-market">＋ Add market</button></div>
+      <form id="expert-guessing-form"><div class="expert-admin-grid">${guessingInputs || `<div class="empty-state"><strong>No markets available</strong>Add markets in Markets &amp; games, then return here to publish expert numbers.</div>`}</div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit" ${guessingMarkets.length ? "" : "disabled"}>Save expert guessing numbers</button></div></form>
     </section>`;
 }
 
 function detailsPage() {
-  return `${pageHeading("Admin profile", "Kalyan Gold administrator workspace.", button("Back to dashboard", "go-dashboard"))}
-    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>Kalyan Gold Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
+  return `${pageHeading("Admin profile", "A2 MORNING administrator workspace.", button("Back to dashboard", "go-dashboard"))}
+    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>A2 MORNING Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
 }
 
 function activePlayer() {
@@ -1452,8 +1971,12 @@ function playerHistoryPage() {
 }
 
 const pageRenderers = {
-  dashboard: dashboardPage, players: playersPage, "new-users": newUsersPage, requests: requestsPage, markets: marketsPage,
-  results: resultsPage, rates: ratesPage, transactions: transactionsPage, played: playedPage,
+  dashboard: dashboardPage, players: playersPage, "new-users": newUsersPage,
+  "deposit-requests": () => requestKindPage("Deposit"),
+  "withdrawal-requests": () => requestKindPage("Withdrawal"),
+  requests: () => requestKindPage("Deposit"),
+  markets: marketsPage,
+  results: resultsPage, winners: winnersPage, rates: ratesPage, transactions: transactionsPage, played: playedPage,
   reports: reportsPage, notices: noticesPage, settings: settingsPage, profile: detailsPage,
   "player-app": playerAppPage, "player-account": playerAccountPage, "player-history": playerHistoryPage,
 };
@@ -1542,7 +2065,7 @@ function modal(title, body, onSubmit, options = {}) {
 }
 
 function playerModal(player) {
-  const existing = player || { id: "", name: "", mobile: "", balance: 0, status: "Active", approved: true };
+  const existing = player || { id: "", name: "", mobile: "", balance: 0, totalAdded: 0, totalWithdrawn: 0, status: "Active", approved: true };
   const isEdit = Boolean(player);
   modal(isEdit ? "Edit player" : "Add player", `<div class="form-grid">
     <div class="form-field"><label>Full name</label><input class="field" name="name" value="${escapeHtml(existing.name)}" required maxlength="80"></div>
@@ -1557,7 +2080,7 @@ function playerModal(player) {
     if (duplicate) return toast("A player with this mobile number already exists.", true), false;
     const record = { ...existing, name, mobile, balance: Number(form.get("balance")), status: form.get("status"), approved: form.has("approved") };
     if (isEdit) Object.assign(player, record);
-    else data.players.unshift({ ...record, id: `p-${Date.now()}`, joined: new Date().toLocaleDateString("en-CA"), played: 0 });
+    else data.players.unshift({ ...record, id: `p-${Date.now()}`, joined: new Date().toLocaleDateString("en-CA"), played: 0, totalAdded: 0, totalWithdrawn: 0 });
     persist(isEdit ? "Player updated." : "Player added.");
     render();
     return true;
@@ -1635,6 +2158,8 @@ function creditModal(player) {
       const type = form.get("type");
       if (type === "Withdrawal" && selected.balance < amount) return toast("The player's balance is too low for this withdrawal.", true), false;
       selected.balance += type === "Added" ? amount : -amount;
+      if (type === "Added") selected.totalAdded = Number(selected.totalAdded || 0) + amount;
+      else selected.totalWithdrawn = Number(selected.totalWithdrawn || 0) + amount;
       data.transactions.unshift({ id: `T-${Date.now()}`, player: selected.name, mobile: selected.mobile, type, amount: type === "Added" ? amount : -amount, date: new Date().toLocaleString(), note: String(form.get("note") || "Admin entry").trim() });
       persist("Payment recorded and wallet updated.");
       render();
@@ -1648,6 +2173,8 @@ function creditModal(player) {
     if (!Number.isFinite(amount) || amount <= 0) return toast("Enter an amount greater than zero.", true), false;
     if (type === "Withdrawal" && player.balance < amount) return toast("The player's balance is too low for this withdrawal.", true), false;
     player.balance += type === "Added" ? amount : -amount;
+    if (type === "Added") player.totalAdded = Number(player.totalAdded || 0) + amount;
+    else player.totalWithdrawn = Number(player.totalWithdrawn || 0) + amount;
     data.transactions.unshift({ id: `T-${Date.now()}`, player: player.name, mobile: player.mobile, type, amount: type === "Added" ? amount : -amount, date: new Date().toLocaleString(), note: String(form.get("note") || "Admin wallet adjustment").trim() });
     persist("Player wallet updated.");
     render();
@@ -1657,38 +2184,52 @@ function creditModal(player) {
 
 function marketModal(market) {
   const item = market || { name: "", type: "Main market", legacySource: "GAMES", open: "11:00", close: "23:00", status: "Open", result: "—", position: data.markets.length + 1 };
+  const initialDays = normalizedMarketDays(item.days, marketDaysForSource(item.legacySource || "GAMES"));
   modal(market ? "Edit market" : "Add market", `<div class="form-grid">
     <div class="form-field"><label>Market name</label><input class="field" name="name" value="${escapeHtml(item.name)}" maxlength="60" required></div>
-    <div class="form-field"><label>Market day bucket</label><select class="select" name="legacySource">${[["GAMES", "Weekdays (Mon–Fri)"], ["GAMES2", "Saturday"], ["GAMES3", "Sunday"]].map(([source, label]) => `<option value="${source}"${item.legacySource === source ? " selected" : ""}>${label}</option>`).join("")}</select></div>
+    <fieldset class="form-field full market-days"><legend>Open on</legend><div class="market-day-options">${MARKET_WEEKDAYS.map(({ name }) => `<label class="market-day-option"><input type="checkbox" name="days" value="${name}"${initialDays.includes(name) ? " checked" : ""}><span>${name.slice(0, 3)}</span></label>`).join("")}</div><div class="hint">Choose every day this market should be available. Select all 7 for a full week.</div></fieldset>
     <div class="form-field"><label>Open time</label><input class="field" name="open" type="time" value="${escapeHtml(marketTimeInput(item.open))}" required></div>
     <div class="form-field"><label>Close time</label><input class="field" name="close" type="time" value="${escapeHtml(marketTimeInput(item.close))}" required></div>
     <div class="form-field"><label>Position</label><input class="field" name="position" type="number" min="0" value="${item.position}" required></div>
     <div class="form-field"><label>Status</label><select class="select" name="status"><option${item.status === "Open" ? " selected" : ""}>Open</option><option${item.status === "Closed" ? " selected" : ""}>Closed</option></select></div>
     </div>`, (form) => {
     const name = String(form.get("name")).trim();
-    const source = String(form.get("legacySource"));
+    const days = normalizedMarketDays(form.getAll("days"));
+    if (!days.length) return toast("Select at least one day for this market.", true), false;
+    const selectedSources = [...new Set(MARKET_WEEKDAYS.filter((day) => days.includes(day.name)).map((day) => day.bucket))];
     const duplicate = data.markets.find((entry) => entry.name.toLowerCase() === name.toLowerCase()
-      && entry.legacySource === source && entry.id !== item.id);
-    if (duplicate) return toast("A market with this name already exists.", true), false;
-    const sourceChanged = item.legacySource !== source;
+      && entry.id !== item.id
+      && normalizedMarketDays(entry.days, marketDaysForSource(entry.legacySource || "GAMES")).some((day) => days.includes(day)));
+    if (duplicate) return toast("A market with this name is already scheduled on one or more selected days.", true), false;
+    const existingEntries = marketLegacyEntries(item);
+    const legacyEntries = {};
+    for (const source of selectedSources) {
+      legacyEntries[source] = existingEntries[source] || nextLegacyMarketKey(source);
+    }
+    if (!item.id) {
+      item.id = `MARKET-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    const primarySource = selectedSources[0];
     Object.assign(item, {
       name,
       type: marketTypeFromName(name),
-      legacySource: source,
-      open: form.get("open"),
-      close: form.get("close"),
+      days,
+      legacyEntries,
+      legacySource: primarySource,
+      legacyKey: legacyEntries[primarySource],
+      open: String(form.get("open") || ""),
+      close: String(form.get("close") || ""),
       position: Number(form.get("position")),
       status: form.get("status"),
     });
+    if (!Array.isArray(item.legacyFields)) {
+      item.legacyFields = [name, legacyMarketTime(item.open), legacyMarketTime(item.close), "Y", "Y", item.status === "Open" ? "Running" : "Stop", "### - ## - ###", String(item.position)];
+    } else {
+      item.legacyFields = item.legacyFields.slice();
+      item.legacyFields[8] = JSON.stringify({ id: item.id, days });
+    }
     if (!market) {
-      item.legacyKey = nextLegacyMarketKey(source);
-      item.id = `${source}-${item.legacyKey}`;
-      item.legacyFields = [name, legacyMarketTime(item.open), legacyMarketTime(item.close), "Y", "Y", item.status === "Open" ? "Running" : "Stop", "### - ## - ###", String(item.position)];
       data.markets.push(item);
-    } else if (sourceChanged) {
-      item.legacyKey = nextLegacyMarketKey(source);
-      item.id = `${source}-${item.legacyKey}`;
-      item.legacyFields = [name, legacyMarketTime(item.open), legacyMarketTime(item.close), "Y", "Y", item.status === "Open" ? "Running" : "Stop", "### - ## - ###", String(item.position)];
     }
     persist(market ? "Market updated." : "Market added.");
     render();
@@ -1716,6 +2257,28 @@ function saveResult(market, session, date, result) {
   market.updatedAt = Date.now();
   data.transactions.unshift({ id: `R-${Date.now()}`, player: "System", mobile: "—", type: "Result", amount: 0, date: new Date().toLocaleString(), note: `${market.name} · ${session} · ${date} · ${result}` });
   return previousResult !== result;
+}
+
+async function savePublicResultChart(market, session, date, panel, result) {
+  const marketKey = market.name.trim().replace(/[.#$\[\]/]/g, "_");
+  const path = ["results", marketKey, date].map(encodeURIComponent).join("/");
+  const url = `${resultChartDatabaseUrl}/${path}.json?print=silent`;
+  const payload = {
+    market: market.name,
+    date,
+    [session.toLowerCase() === "open" ? "openPanel" : "closePanel"]: panel,
+    [session.toLowerCase() === "open" ? "openResult" : "closeResult"]: result,
+    updatedAt: new Date().toISOString(),
+  };
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Chart database rejected the result (${response.status}): ${detail || response.statusText}`);
+  }
 }
 
 function distributeWinnings(market, date, session, result) {
@@ -1777,7 +2340,7 @@ function distributeWinnings(market, date, session, result) {
     player.balance += amount;
     for (const winner of wins) {
       data.transactions.unshift({
-        id: `W-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `W-${safeMarkerKey(settlementId)}-${safeMarkerKey(winner.id)}`,
         player: player.name,
         mobile: player.mobile,
         type: "Winning",
@@ -1864,7 +2427,7 @@ function downloadBidExport(range) {
   const anchor = document.createElement("a");
   anchor.href = url;
   const suffix = range === "today" ? "today" : range === "week" ? "last-7-days" : "all";
-  anchor.download = `kalyan-gold-bids-${suffix}-${localDateKey()}.csv`;
+  anchor.download = `a2morning-bids-${suffix}-${localDateKey()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
   toast(`${rows.length} bid${rows.length === 1 ? "" : "s"} exported with player and result details.`);
@@ -1939,7 +2502,14 @@ function configureBroadcastSender() {
     toast(`Could not read sender settings: ${error.message}`, true);
     return;
   }
-  modal("Configure Google Apps Script", `<p class="hint">Paste the deployed Apps Script web app URL and its BROADCAST_TOKEN. The token is kept only for this admin session.</p><div class="form-grid"><div class="form-field full"><label>Apps Script web app URL</label><input class="field" name="endpoint" type="url" value="${escapeHtml(endpoint)}" placeholder="https://script.google.com/macros/s/.../exec" required></div><div class="form-field full"><label>Broadcast token</label><input class="field" name="token" type="password" minlength="24" maxlength="200" autocomplete="new-password" required></div></div>`, (form) => {
+  let token = "";
+  try {
+    token = localStorage.getItem(BROADCAST_TOKEN_KEY) || "";
+  } catch (error) {
+    toast(`Could not read sender settings: ${error.message}`, true);
+    return;
+  }
+  modal("Configure Google Apps Script", `<p class="hint">Enter the deployed Apps Script web app URL and its BROADCAST_TOKEN. These settings are saved in this browser so you will not need to enter them again on your next visit. Do not use this on a shared device.</p><div class="form-grid"><div class="form-field full"><label>Apps Script web app URL</label><input class="field" name="endpoint" type="url" value="${escapeHtml(endpoint)}" placeholder="https://script.google.com/macros/s/.../exec" required></div><div class="form-field full"><label>Broadcast token</label><input class="field" name="token" type="password" minlength="24" maxlength="200" autocomplete="new-password" value="${escapeHtml(token)}" required></div></div>`, (form) => {
     const url = new URL(String(form.get("endpoint") || "").trim());
     const token = String(form.get("token") || "").trim();
     if (url.protocol !== "https:" || url.hostname !== "script.google.com"
@@ -1953,12 +2523,12 @@ function configureBroadcastSender() {
     }
     try {
       localStorage.setItem(BROADCAST_ENDPOINT_KEY, url.href);
-      sessionStorage.setItem(BROADCAST_TOKEN_KEY, token);
+      localStorage.setItem(BROADCAST_TOKEN_KEY, token);
     } catch (error) {
       toast(`Could not save sender settings: ${error.message}`, true);
       return false;
     }
-    toast("Google Apps Script sender configured for this session.");
+    toast("Google Apps Script sender settings saved in this browser.");
     render();
     return true;
   }, { submitLabel: "Save sender" });
@@ -1969,7 +2539,7 @@ function sendPushBroadcast(heading, message) {
   let token;
   try {
     endpoint = localStorage.getItem(BROADCAST_ENDPOINT_KEY) || "";
-    token = sessionStorage.getItem(BROADCAST_TOKEN_KEY) || "";
+    token = localStorage.getItem(BROADCAST_TOKEN_KEY) || "";
   } catch (error) {
     toast(`Could not read sender settings: ${error.message}`, true);
     return Promise.resolve(false);
@@ -1982,18 +2552,6 @@ function sendPushBroadcast(heading, message) {
     toast("The configured Google Apps Script URL is invalid. Configure it again.", true);
     return Promise.resolve(false);
   }
-  let imageUrl;
-  try {
-    imageUrl = new URL("logo.png", window.location.href);
-  } catch (error) {
-    toast(`Could not resolve the notification logo URL: ${error.message}`, true);
-    return Promise.resolve(false);
-  }
-  if (imageUrl.protocol !== "https:") {
-    toast("Push notifications require the deployed site logo to have a public HTTPS URL.", true);
-    return Promise.resolve(false);
-  }
-
   if (!window.crypto?.getRandomValues) {
     toast("Secure random values are unavailable. Open the admin over HTTPS and try again.", true);
     return Promise.resolve(false);
@@ -2011,7 +2569,7 @@ function sendPushBroadcast(heading, message) {
   form.action = endpoint;
   form.target = frameName;
   form.hidden = true;
-  const values = { nonce, token, heading, message, imageUrl: imageUrl.href };
+  const values = { nonce, token, heading, message, imageUrl: BROADCAST_IMAGE_URL };
   for (const [name, value] of Object.entries(values)) {
     const input = document.createElement("input");
     input.type = "hidden";
@@ -2035,7 +2593,7 @@ function sendPushBroadcast(heading, message) {
       cleanup();
       toast("No response from Google Apps Script. Check deployment access and try again.", true);
       resolve(false);
-    }, 45_000);
+    }, 90_000);
     pendingBroadcasts.set(nonce, {
       complete(response) {
         pendingBroadcasts.delete(nonce);
@@ -2052,7 +2610,7 @@ function sendPushBroadcast(heading, message) {
     const checkStatus = () => {
       if (pollScript?.isConnected) return;
       pollScript = document.createElement("script");
-      pollScript.src = `${endpoint}?callback=kalyanBroadcastStatus&status=${encodeURIComponent(nonce)}`;
+      pollScript.src = `${endpoint}?callback=a2morningBroadcastStatus&status=${encodeURIComponent(nonce)}`;
       pollScript.async = true;
       pollScript.onerror = () => {
         pollScript?.remove();
@@ -2078,7 +2636,7 @@ function sendPushBroadcast(heading, message) {
   });
 }
 
-window.kalyanBroadcastStatus = (response) => {
+window.a2morningBroadcastStatus = (response) => {
   if (!response || typeof response.nonce !== "string") return;
   const pending = pendingBroadcasts.get(response.nonce);
   if (!pending) return;
@@ -2096,6 +2654,171 @@ window.kalyanBroadcastStatus = (response) => {
   }
   pending.complete(response);
 };
+
+function requestPath(request) {
+  const match = String(request.id).match(/^(WR|DR)-(.+)$/);
+  return match ? { collection: match[1], key: match[2] } : null;
+}
+
+function safeMarkerKey(value) {
+  return String(value).replace(/[^A-Za-z0-9_-]/g, char => `_${char.codePointAt(0).toString(16)}_`);
+}
+
+async function adjustRequestBalanceOnce(request, target, operation, delta) {
+  if (!databaseRootRef || !target || !/^\d{10,}$/.test(target.mobile)) {
+    throw new Error("The player's account could not be found.");
+  }
+  const marker = safeMarkerKey(`${operation}_${request.id}`);
+  const profileRef = databaseRootRef.child(`DATA/${target.mobile}`);
+  let alreadyApplied = false;
+  const result = await profileRef.transaction(profile => {
+    alreadyApplied = false;
+    if (!profile || typeof profile !== "object" || Array.isArray(profile)) return;
+    const markers = profile.walletRequestAdjustments && typeof profile.walletRequestAdjustments === "object"
+      ? profile.walletRequestAdjustments : {};
+    if (markers[marker]) {
+      alreadyApplied = true;
+      return;
+    }
+    const balanceField = ["bal", "COINS", "B2"].find(field => profile[field] !== undefined && profile[field] !== null);
+    if (!balanceField) return;
+    const balance = Number(decodeLegacyValue(profile[balanceField]));
+    if (!Number.isFinite(balance) || balance < 0) return;
+    const nextBalance = balance + delta;
+    if (!Number.isFinite(nextBalance) || nextBalance < 0) return;
+    const nextMarkers = { ...markers, [marker]: true };
+    const nextProfile = { ...profile, [balanceField]: nextBalance, walletRequestAdjustments: nextMarkers };
+    const counterField = operation === "deposit" ? "TD" : operation === "withdrawal" ? "TW" : "";
+    if (counterField) {
+      const currentTotal = Number(decodeLegacyValue(profile[counterField]) || 0);
+      if (!Number.isFinite(currentTotal) || currentTotal < 0) return;
+      nextProfile[counterField] = currentTotal + request.amount;
+    }
+    return nextProfile;
+  });
+  const savedProfile = result.snapshot.val();
+  const savedMarkers = savedProfile?.walletRequestAdjustments;
+  if (!result.committed && !alreadyApplied && !savedMarkers?.[marker]) {
+    throw new Error(delta < 0 ? "The player's balance is insufficient or could not be updated." : "The player's balance could not be updated.");
+  }
+  if (!savedProfile || typeof savedProfile !== "object") {
+    throw new Error("The player's account record is missing.");
+  }
+  const field = ["bal", "COINS", "B2"].find(name => savedProfile[name] !== undefined && savedProfile[name] !== null);
+  if (!field) throw new Error("The player's account has no supported balance field.");
+  target.balanceField = field;
+  target.balance = Number(decodeLegacyValue(savedProfile[field]));
+  target.totalAdded = numberFromLegacy(savedProfile.TD);
+  target.totalWithdrawn = numberFromLegacy(savedProfile.TW);
+  const baseline = lastSyncedData?.players?.find(player => player.mobile === target.mobile);
+  if (baseline) {
+    baseline.balanceField = target.balanceField;
+    baseline.balance = target.balance;
+    baseline.totalAdded = target.totalAdded;
+    baseline.totalWithdrawn = target.totalWithdrawn;
+  }
+  return { alreadyApplied, balance: target.balance, totalAdded: target.totalAdded, totalWithdrawn: target.totalWithdrawn };
+}
+
+async function resolvePaymentRequest(requestId, status) {
+  const request = data.requests.find(item => item.id === requestId);
+  if (!request || request.status !== "Pending" || requestsInProgress.has(requestId)) return;
+  const path = requestPath(request);
+  if (!path || !databaseRootRef) {
+    toast("The request source is not available.", true);
+    return;
+  }
+  if (request.amountUnavailable || !Number.isFinite(request.amount) || request.amount <= 0) {
+    toast("This request does not contain a valid amount.", true);
+    return;
+  }
+  const target = data.players.find(player => player.mobile === request.mobile);
+  if (status === "Approved" && !target) {
+    toast("Cannot approve this request because the player account is missing.", true);
+    return;
+  }
+  if (status === "Refunded" && (request.kind !== "Withdrawal" || !request.balanceDeducted || !target)) {
+    toast("This withdrawal cannot be refunded because its reserved balance is unavailable.", true);
+    return;
+  }
+  if (!["Approved", "Rejected", "Refunded"].includes(status)) return;
+
+  requestsInProgress.add(requestId);
+  render();
+  try {
+    const requestRef = databaseRootRef.child(`${path.collection}/${path.key}`);
+    const snapshot = await requestRef.once("value");
+    const currentFields = decodeLegacyValue(snapshot.val());
+    if (!Array.isArray(currentFields)) throw new Error("The request no longer exists or has an unsupported format.");
+    const amountIndex = request.kind === "Deposit" ? 3 : 7;
+    if (String(currentFields[0] || "") !== request.mobile
+      || Number(currentFields[amountIndex]) !== request.amount) {
+      throw new Error("The request details changed. Refresh the page and review it again.");
+    }
+    const currentStatus = String(currentFields.at(-1) || "").trim();
+    if (currentStatus && currentStatus.toLowerCase() !== "pending") {
+      throw new Error(`This request was already marked ${currentStatus}. Refresh the page before continuing.`);
+    }
+    if (status === "Approved" && request.kind === "Deposit") {
+      const outcome = await adjustRequestBalanceOnce(request, target, "deposit", request.amount);
+      if (outcome.alreadyApplied) toast("This deposit was already credited; the request status will now be synchronized.");
+    } else if (status === "Refunded") {
+      const outcome = await adjustRequestBalanceOnce(request, target, "refund", request.amount);
+      if (outcome.alreadyApplied) toast("This withdrawal was already refunded; the request status will now be synchronized.");
+    } else if (status === "Approved" && request.kind === "Withdrawal" && !request.balanceDeducted) {
+      await adjustRequestBalanceOnce(request, target, "withdrawal", -request.amount);
+    } else if (status === "Approved" && request.kind === "Withdrawal") {
+      await adjustRequestBalanceOnce(request, target, "withdrawal", 0);
+    }
+
+    const activeRequest = data.requests.find(item => item.id === requestId) || request;
+    const previousStatus = activeRequest.status;
+    activeRequest.status = status;
+    if (status === "Approved" && request.kind === "Deposit") {
+      data.transactions.unshift({
+        id: `T-${Date.now()}-${safeMarkerKey(request.id)}`,
+        player: target.name,
+        mobile: target.mobile,
+        type: "Added",
+        amount: request.amount,
+        date: new Date().toLocaleString(),
+        note: `Approved deposit request${currentFields[2] ? ` · UPI reference ${currentFields[2]}` : ""}`,
+      });
+    } else if (status === "Approved" && request.kind === "Withdrawal") {
+      data.transactions.unshift({
+        id: `T-${Date.now()}-${safeMarkerKey(request.id)}`,
+        player: target.name,
+        mobile: target.mobile,
+        type: "Withdrawal",
+        amount: -request.amount,
+        date: new Date().toLocaleString(),
+        note: "Approved withdrawal request",
+      });
+    } else if (status === "Refunded") {
+      data.transactions.unshift({
+        id: `T-${Date.now()}-${safeMarkerKey(request.id)}`,
+        player: target.name,
+        mobile: target.mobile,
+        type: "Added",
+        amount: request.amount,
+        date: new Date().toLocaleString(),
+        note: "Refunded reserved withdrawal request",
+      });
+    }
+    persist(`Request ${status.toLowerCase()}.`);
+    const saved = await lastPersistPromise;
+    if (!saved) {
+      activeRequest.status = previousStatus;
+      data.transactions = data.transactions.filter(item => !String(item.id).endsWith(safeMarkerKey(request.id)));
+      toast("The balance change completed, but request status could not be saved. Retry safely after reconnecting.", true);
+    }
+  } catch (error) {
+    toast(error.message || "Could not resolve the payment request.", true);
+  } finally {
+    requestsInProgress.delete(requestId);
+    render();
+  }
+}
 
 document.addEventListener("click", (event) => {
   const pageTarget = event.target.closest("[data-page]");
@@ -2152,49 +2875,9 @@ document.addEventListener("click", (event) => {
     case "resolve-request": {
       const request = data.requests.find((item) => item.id === id);
       if (!request || request.status !== "Pending") break;
-      if (control.dataset.status === "Refunded" || control.dataset.status === "Deleted") {
-        const warning = control.dataset.status === "Refunded"
-          ? `Refund ${money(request.amount)} to ${request.player} and close this withdrawal?`
-          : `Delete this request without changing ${request.player}'s balance?`;
-        if (!window.confirm(warning)) break;
-      }
-      if (request.amountUnavailable && control.dataset.status === "Approved") {
-        toast("This legacy request does not expose a supported amount field and cannot be approved here.", true);
-        break;
-      }
-      const target = data.players.find((item) => item.mobile === request.mobile);
-      if (control.dataset.status === "Approved" && (!target || !target.balanceField)) {
-        toast("Cannot approve this request because the player account has no supported balance field.", true);
-        break;
-      }
-      if (control.dataset.status === "Refunded"
-        && (request.kind !== "Withdrawal" || !request.balanceDeducted || !target || !target.balanceField || request.amountUnavailable)) {
-        toast("Cannot refund: the reserved withdrawal amount or player balance field is unavailable.", true);
-        break;
-      }
-      if (control.dataset.status === "Approved" && !["Deposit", "Withdrawal"].includes(request.kind)) {
-        toast("Cannot approve a request with an unsupported payment type.", true);
-        break;
-      }
-      if (control.dataset.status === "Approved" && request.kind === "Deposit" && target) {
-        target.balance += request.amount;
-        data.transactions.unshift({ id: `T-${Date.now()}`, player: target.name, mobile: target.mobile, type: "Added", amount: request.amount, date: new Date().toLocaleString(), note: `Approved ${request.kind.toLowerCase()} request` });
-      } else if (control.dataset.status === "Approved" && request.kind === "Withdrawal" && target) {
-        if (!request.balanceDeducted && target.balance < request.amount) {
-          toast("Cannot approve: the player's balance is too low.", true);
-          break;
-        }
-        if (!request.balanceDeducted) target.balance -= request.amount;
-        data.transactions.unshift({ id: `T-${Date.now()}`, player: target.name, mobile: target.mobile, type: "Withdrawal", amount: -request.amount, date: new Date().toLocaleString(), note: "Approved withdrawal request" });
-      } else if (control.dataset.status === "Refunded" && target) {
-        target.balance += request.amount;
-        data.transactions.unshift({ id: `T-${Date.now()}`, player: target.name, mobile: target.mobile, type: "Added", amount: request.amount, date: new Date().toLocaleString(), note: "Refunded reserved withdrawal request" });
-      }
-      request.status = control.dataset.status;
-      persist(request.status === "Deleted" ? "Request deleted without changing the player's balance."
-        : request.status === "Refunded" ? "Withdrawal refunded to the player's balance."
-          : `Request ${request.status.toLowerCase()}.`);
-      render();
+      const status = control.dataset.status;
+      if (status === "Refunded" && !window.confirm(`Refund ${money(request.amount)} to ${request.player} and close this withdrawal?`)) break;
+      void resolvePaymentRequest(id, status);
       break;
     }
     case "manual-payment": requestManualPayment(); break;
@@ -2317,10 +3000,16 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
   submitButton.querySelector("span").textContent = "Verifying…";
   errorElement.textContent = "";
   try {
-    await verifyAdminLogin(phone, password);
+    const senderCredentials = await verifyAdminLogin(phone, password);
+    if (senderCredentials.endpoint && senderCredentials.token.length >= 24) {
+      localStorage.setItem(BROADCAST_ENDPOINT_KEY, senderCredentials.endpoint);
+      localStorage.setItem(BROADCAST_TOKEN_KEY, senderCredentials.token);
+    }
     localStorage.setItem(ADMIN_SESSION_KEY, "verified");
+    localStorage.setItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY, senderCredentials.credentialFingerprint);
     establishAdminHistory();
     setAdminAppVisible(true);
+    monitorAdminPassword(senderCredentials.credentialFingerprint);
     document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
     setConnectionStatus("Connecting…", "Live updates", "connecting");
     document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Loading admin data…</div>`;
@@ -2557,10 +3246,15 @@ document.addEventListener("submit", (event) => {
     resultPanelDraft = panel;
     const resultChanged = saveResult(market, session, date, result);
     persist(`Result saved: ${result}. Review the winners before distributing.`);
-    void lastPersistPromise.then((saved) => {
-      if (saved && resultChanged) {
-        return sendPushBroadcast(market.name, `${session} result: ${result} · ${date}`);
+    void lastPersistPromise.then(async (saved) => {
+      if (!saved) return false;
+      try {
+        await savePublicResultChart(market, session, date, panel, result);
+        toast("Public result chart updated.");
+      } catch (error) {
+        toast(`Result was saved to the admin database, but chart sync failed: ${error.message}`, true);
       }
+      if (resultChanged) return sendPushBroadcast(market.name, `${session} result: ${result} · ${date}`);
       return false;
     });
     render();
@@ -2583,22 +3277,34 @@ document.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
     const signUpBonus = Number(form.get("signUpBonus"));
+    const minimumDeposit = Number(form.get("minimumDeposit"));
     const minimumWithdrawal = Number(form.get("minimumWithdrawal"));
     const minimumEntry = Number(form.get("minimumEntry"));
     const maximumEntry = Number(form.get("maximumEntry"));
+    const withdrawalWindows = {
+      morning: { open: String(form.get("morningOpen") || ""), close: String(form.get("morningClose") || "") },
+      evening: { open: String(form.get("eveningOpen") || ""), close: String(form.get("eveningClose") || "") },
+    };
+    const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
     if (!Number.isFinite(signUpBonus) || signUpBonus < 0 ||
+        !Number.isFinite(minimumDeposit) || minimumDeposit < 0 ||
         !Number.isFinite(minimumWithdrawal) || minimumWithdrawal < 0 ||
         !Number.isFinite(minimumEntry) || minimumEntry < 0 ||
         !Number.isFinite(maximumEntry) || maximumEntry < 0 ||
-        (maximumEntry > 0 && minimumEntry > maximumEntry)) {
-      toast("Enter valid non-negative settings. A non-zero maximum bid must be at least the minimum bid.", true);
+        (maximumEntry > 0 && minimumEntry > maximumEntry) ||
+        Object.values(withdrawalWindows).some(window =>
+          !validTime(window.open) || !validTime(window.close) || window.open === window.close)) {
+      toast("Check the non-negative settings, bid limits, and both withdrawal windows. Each opening time must differ from its closing time.", true);
       return;
     }
     Object.assign(data.settings, {
       signUpBonus,
+      minimumDeposit,
       minimumWithdrawal,
       minimumEntry,
       maximumEntry,
+      withdrawalWindows,
+      withdrawalWindowsConfigured: true,
       withdrawTiming: String(form.get("withdrawTiming") || "").trim(),
       websiteUrl: String(form.get("websiteUrl") || "").trim(),
       resultChartUrl: String(form.get("resultChartUrl") || "").trim(),
@@ -2608,6 +3314,21 @@ document.addEventListener("submit", (event) => {
     });
     persist("Player website settings saved.");
     render();
+  }
+  if (event.target.id === "expert-guessing-form") {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const submit = event.submitter;
+    if (submit) submit.disabled = true;
+    void saveAdminExpertGuessing(form).then(() => {
+      generatedExpertGuessing.clear();
+      toast("Expert guessing numbers saved to the web-result Firebase database.");
+      render();
+    }).catch(error => {
+      toast(error.message || "Expert guessing numbers could not be saved.", true);
+    }).finally(() => {
+      if (submit) submit.disabled = false;
+    });
   }
   if (event.target.id === "notice-form") {
     event.preventDefault();
@@ -2662,6 +3383,24 @@ function startRealtimeSync() {
         new Set(Object.keys(root[source] || {})),
       ]));
       data = mergeLiveData(root);
+      ensureDefaultWithdrawalWindows(root);
+      if (!adminExpertGuessingLoaded && !adminExpertGuessingLoadInProgress) {
+        adminExpertGuessingLoadInProgress = true;
+        void fetchAdminExpertGuessing().then(() => {
+          adminExpertGuessingLoaded = true;
+          return seedMissingAdminExpertGuessing();
+        }).then(() => {
+          if (currentPage === "settings") render();
+        }).catch(error => {
+          toast(error.message || "Could not load or seed expert guessing numbers.", true);
+        }).finally(() => {
+          adminExpertGuessingLoadInProgress = false;
+        });
+      } else if (adminExpertGuessingLoaded) {
+        void seedMissingAdminExpertGuessing().catch(error => {
+          toast(error.message || "Could not seed expert guessing numbers.", true);
+        });
+      }
       todayNewUsers = readTodayNewUsers(root);
       todayLoginCount = todayNewUsers.length;
       gameAccessByMobile = readGameAccessByMobile(root);
@@ -2685,10 +3424,35 @@ function startRealtimeSync() {
 }
 
 if (localStorage.getItem(ADMIN_SESSION_KEY) === "verified") {
-  setAdminAppVisible(true);
-  document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-  setConnectionStatus("Connecting…", "Live updates", "connecting");
-  document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Loading admin data…</div>`;
-  establishAdminHistory();
-  startRealtimeSync();
+  const savedFingerprint = localStorage.getItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY) || "";
+  if (!savedFingerprint) {
+    signOutAdmin();
+  } else {
+    void (async () => {
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const snapshot = await firebase.database().ref("Admin/Admin/PassAdmin").once("value");
+        const currentFingerprint = await adminPasswordFingerprint(snapshot.val());
+        if (currentFingerprint !== savedFingerprint) {
+          signOutAdmin("The admin password changed. Sign in again with the new password.");
+          return;
+        }
+        setAdminAppVisible(true);
+        monitorAdminPassword(savedFingerprint);
+        document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+        setConnectionStatus("Connecting…", "Live updates", "connecting");
+        document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Loading admin data…</div>`;
+        establishAdminHistory();
+        startRealtimeSync();
+      } catch (error) {
+        signOutAdmin(`Could not verify your saved admin session: ${error.message}`);
+      }
+    })();
+  }
 }
+
+window.addEventListener("storage", (event) => {
+  if (event.key === ADMIN_SESSION_KEY && !event.newValue && adminAuthenticated) {
+    signOutAdmin("Signed out in another browser tab.");
+  }
+});

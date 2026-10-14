@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#760900">
+  <title>Market Panel Chart | A2 MORNING</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #171717;
+      background: #760900;
+    }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; background: #760900; }
+    .topbar {
+      position: sticky;
+      z-index: 2;
+      top: 0;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      padding: max(5px, env(safe-area-inset-top)) 13px 5px;
+      color: #fff;
+      background: #760900;
+    }
+    .topbar button, .topbar a {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      color: #760900;
+      background: #fff;
+      font-size: 25px;
+      line-height: 1;
+      text-decoration: none;
+    }
+    .topbar h1 {
+      overflow: hidden;
+      margin: 0;
+      font-size: clamp(15px, 4.4vw, 20px);
+      font-weight: 800;
+      text-align: center;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    main { padding: 10px 12px 24px; }
+    .chart-shell {
+      overflow: hidden;
+      border: 2px solid #f0c928;
+      border-radius: 23px;
+      background: #fff;
+      box-shadow: 0 7px 20px rgba(45, 0, 0, .18);
+    }
+    .chart-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+    table {
+      width: 100%;
+      min-width: 420px;
+      border-collapse: collapse;
+      table-layout: fixed;
+      background: #fff;
+    }
+    col.date-column { width: 9%; }
+    col.day-column { width: 13%; }
+    thead th {
+      height: 39px;
+      padding: 3px 1px;
+      border: 1px solid #d9ad00;
+      color: #202020;
+      background: #ffc900;
+      font-size: clamp(12px, 3.4vw, 16px);
+      font-weight: 900;
+      text-align: center;
+    }
+    tbody tr { height: 132px; }
+    tbody th, tbody td {
+      padding: 3px 2px;
+      border: 1px solid #d5d5d5;
+      vertical-align: middle;
+    }
+    tbody th {
+      color: #262626;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.28;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+    .date-range { display: grid; justify-items: center; gap: 3px; }
+    .chart-day { display: grid; justify-items: center; gap: 7px; }
+    .chart-panel { display: grid; justify-items: center; gap: 2px; }
+    .chart-panel span {
+      color: #222;
+      font-size: clamp(11px, 3.3vw, 16px);
+      font-weight: 800;
+      letter-spacing: .14em;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .chart-panel .jodi { letter-spacing: .18em; }
+    .chart-panel .missing { color: #1c1c1c; font-weight: 500; }
+    .chart-panel .updated { color: #bd2828; }
+    .status {
+      margin: 0;
+      padding: 8px 11px;
+      color: #5d403e;
+      background: #fff8e3;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .status[hidden] { display: none; }
+    .site-link {
+      display: block;
+      width: fit-content;
+      margin: 14px auto 0;
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,.44);
+      border-radius: 20px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    @media (max-width: 460px) {
+      main { padding: 8px 5px 20px; }
+      .chart-shell { border-radius: 16px; }
+      table { min-width: 420px; }
+      tbody tr { height: 116px; }
+      tbody th { font-size: 9px; }
+      .chart-panel { gap: 1px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="index.html" aria-label="Back to A2 MORNING admin">‹</a>
+    <h1 id="chart-title">Market Panel Chart</h1>
+    <button id="refresh-chart" type="button" aria-label="Refresh chart">↻</button>
+  </header>
+  <main>
+    <section class="chart-shell" aria-label="Weekly market results">
+      <p class="status" id="chart-status" role="status">Loading market results…</p>
+      <div class="chart-scroll">
+        <table>
+          <colgroup><col class="date-column"><col class="day-column" span="7"></colgroup>
+          <thead><tr><th scope="col">Date</th><th scope="col">MON</th><th scope="col">TUE</th><th scope="col">WED</th><th scope="col">THU</th><th scope="col">FRI</th><th scope="col">SAT</th><th scope="col">SUN</th></tr></thead>
+          <tbody id="chart-body"></tbody>
+        </table>
+      </div>
+    </section>
+    <a class="site-link" href="index.html">A2 MORNING admin</a>
+  </main>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+  <script>
+    const resultFirebaseConfig = {
+      apiKey: "AIzaSyCGqJ1XvEYbgJ_eN5OEuzAymc3E4wKr8eI",
+      authDomain: "a2morning-web-result.firebaseapp.com",
+      databaseURL: "https://a2morning-web-result-default-rtdb.firebaseio.com",
+      projectId: "a2morning-web-result",
+      storageBucket: "a2morning-web-result.firebasestorage.app",
+      messagingSenderId: "807940358876",
+      appId: "1:807940358876:web:37d5de4963837b8783aa19",
+      measurementId: "G-FD7MK1CWCK"
+    };
+    const params = new URLSearchParams(location.search);
+    const requestedMarket = (params.get("market") || "").trim();
+    const title = document.getElementById("chart-title");
+    const status = document.getElementById("chart-status");
+    const body = document.getElementById("chart-body");
+    const firebaseApp = firebase.initializeApp(resultFirebaseConfig);
+    let resultsRef;
+
+    function marketKey(name) {
+      return String(name || "").trim().replace(/[.#$\[\]/]/g, "_");
+    }
+
+    function localDateKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }
+
+    function parseDate(value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+      const [year, month, day] = value.split("-").map(Number);
+      const date = new Date(year, month - 1, day);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function dateLabel(date) {
+      return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+    }
+
+    function mondayOf(date) {
+      const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+      return result;
+    }
+
+    function resultParts(record) {
+      if (!record || typeof record !== "object") return [];
+      const value = record.closeResult || record.openResult || record.result || "";
+      if (typeof value !== "string") return [];
+      return value.split(/\s*-\s*/).map(part => part.trim()).filter(Boolean).slice(0, 3);
+    }
+
+    function appendText(parent, tag, text, className = "") {
+      const element = document.createElement(tag);
+      element.textContent = text;
+      if (className) element.className = className;
+      parent.append(element);
+      return element;
+    }
+
+    function makeDateCell(start) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const cell = document.createElement("th");
+      cell.scope = "row";
+      const range = document.createElement("span");
+      range.className = "date-range";
+      appendText(range, "span", dateLabel(start));
+      appendText(range, "span", "TO");
+      appendText(range, "span", dateLabel(end));
+      cell.append(range);
+      return cell;
+    }
+
+    function makeResultCell(record) {
+      const cell = document.createElement("td");
+      const day = document.createElement("div");
+      day.className = "chart-day";
+      const parts = resultParts(record);
+      const values = parts.length ? parts : ["*", "**", "*"];
+      const isCurrent = record && record.updatedAt
+        && new Date(record.updatedAt).toDateString() === new Date().toDateString();
+      const panel = document.createElement("div");
+      panel.className = "chart-panel";
+      values.forEach((value, index) => {
+        appendText(panel, "span", value, `${index === 1 ? "jodi " : ""}${parts.length ? (isCurrent ? "updated" : "") : "missing"}`.trim());
+      });
+      day.append(panel);
+      cell.append(day);
+      return cell;
+    }
+
+    function renderChart(results) {
+      const records = results && typeof results === "object" ? results : {};
+      const validDates = Object.keys(records).filter(key => parseDate(key));
+      const today = new Date();
+      const firstDate = validDates.length
+        ? validDates.map(parseDate).sort((a, b) => a - b)[0]
+        : today;
+      const latestDate = validDates.length
+        ? validDates.map(parseDate).sort((a, b) => b - a)[0]
+        : today;
+      const firstMonday = mondayOf(firstDate);
+      const lastMonday = mondayOf(latestDate > today ? latestDate : today);
+      body.replaceChildren();
+      for (let week = new Date(firstMonday); week <= lastMonday; week.setDate(week.getDate() + 7)) {
+        const row = document.createElement("tr");
+        row.append(makeDateCell(week));
+        for (let day = 0; day < 7; day += 1) {
+          const date = new Date(week);
+          date.setDate(date.getDate() + day);
+          row.append(makeResultCell(records[localDateKey(date)]));
+        }
+        body.append(row);
+      }
+      status.hidden = true;
+    }
+
+    function showError(error) {
+      status.hidden = false;
+      status.textContent = `Could not load results: ${error.message || error}`;
+    }
+
+    function startChart() {
+      if (resultsRef) resultsRef.off();
+      if (requestedMarket) {
+        title.textContent = `${requestedMarket} PANEL CHART`;
+        resultsRef = firebaseApp.database().ref(`results/${marketKey(requestedMarket)}`);
+      } else {
+        title.textContent = "MARKET PANEL CHART";
+        resultsRef = firebaseApp.database().ref("results");
+      }
+      resultsRef.on("value", snapshot => {
+        const value = snapshot.val() || {};
+        renderChart(requestedMarket ? value : {});
+        if (!requestedMarket) {
+          status.hidden = false;
+          status.textContent = "Choose a market from the app to view its result chart.";
+        }
+      }, showError);
+    }
+
+    document.getElementById("refresh-chart").addEventListener("click", startChart);
+    startChart();
+  </script>
+</body>
+</html>
