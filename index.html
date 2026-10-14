@@ -1,12 +1,137 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0; url=admin.html?v=2026-10-14-a2morning-admin-v1">
-    <title>A2 MORNING Admin</title>
-  </head>
-  <body>
-    <p>Opening the <a href="admin.html?v=2026-10-14-a2morning-admin-v1">A2 MORNING Admin Console</a>…</p>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f6ec">
+  <title>A2 MORNING</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="web-styles.css?v=account-startup-check-v2">
+  <link rel="stylesheet" href="web-native-app.css">
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+  <script src="web-app.js?v=account-startup-check-v2" defer></script>
+</head>
+<body>
+  <section id="startup-view" class="startup-view" role="status" aria-live="polite">
+    <img src="web-a2morning.png" alt="" class="startup-logo">
+    <strong>A2 MORNING</strong>
+    <span class="startup-spinner" aria-hidden="true"></span>
+    <p id="startup-message">Checking your account…</p>
+    <button id="startup-retry" class="button button-secondary hidden" type="button">Try again</button>
+  </section>
+  <main id="auth-view" class="auth-shell hidden">
+    <section class="auth-brand">
+      <a class="brand-lockup" href="#" aria-label="A2 MORNING home">
+        <img src="web-a2morning.png" alt="" class="brand-logo">
+        <span><strong>A2 MORNING</strong><small>MATKA</small></span>
+      </a>
+      <div class="brand-copy">
+        <p class="eyebrow">WELCOME TO A2 MORNING</p>
+        <h1>Your games.<br><span>Your numbers.</span></h1>
+        <p>One place for market updates, game charts and your points activity.</p>
+      </div>
+      <div class="brand-foot"><span class="live-dot"></span> Your matka dashboard, reimagined</div>
+    </section>
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand">
+          <img src="web-a2morning.png" alt="" class="brand-logo">
+          <strong>A2 MORNING</strong>
+        </div>
+        <p class="eyebrow" id="auth-eyebrow">YOUR ACCOUNT</p>
+        <h2 id="auth-title">Welcome back</h2>
+        <p class="muted" id="auth-subtitle">Sign in with your phone number and password.</p>
+        <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <button class="auth-tab" type="button" data-auth-mode="login">Sign in</button>
+          <button class="auth-tab active" type="button" data-auth-mode="signup">Create account</button>
+        </div>
+        <form id="auth-form" class="form-stack">
+          <label id="name-field" class="field">Full name
+            <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="60" placeholder="Enter your name">
+          </label>
+          <label class="field">Phone number
+            <span class="input-wrap"><span class="input-prefix">+91</span><input id="auth-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit mobile number" required></span>
+          </label>
+          <label class="field">Password
+            <input id="auth-password" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+          </label>
+          <button class="auth-forgot-link hidden" id="forgot-password-button" type="button" data-action="forgot-password">Forgot password?</button>
+          <button class="button button-primary button-wide" id="auth-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
+        </form>
+      </div>
+    </section>
+    <button class="auth-whatsapp-button hidden" id="auth-whatsapp-button" type="button" data-action="auth-whatsapp" aria-label="Chat with us on WhatsApp" title="Chat with us on WhatsApp"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5a12 12 0 0 0-10.3 18.2L4 28l6.5-1.7A12 12 0 1 0 16 3.5Z"/><path d="M12.2 10.5c-.4-.8-.8-.8-1.2-.8h-.9c-.3 0-.8.1-1.2.6s-1.6 1.6-1.6 3.8 1.6 4.4 1.8 4.7 3.1 5 7.5 6.8c3.7 1.5 4.5 1.2 5.3 1.1s2.5-1 2.9-2 .4-1.9.3-2.1-.4-.3-.9-.6l-3-1.5c-.4-.2-.7-.3-1 .2s-1.1 1.5-1.4 1.8-.5.3-1 .1a12.7 12.7 0 0 1-3.7-2.3 13.8 13.8 0 0 1-2.5-3.1c-.3-.5 0-.7.2-.9l.7-.8c.2-.3.3-.5.5-.8s.1-.6 0-.8l-1.2-3.4Z"/></svg></button>
+  </main>
+
+  <div id="app-view" class="app-shell hidden">
+    <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close navigation"></button>
+    <aside class="sidebar" id="sidebar">
+      <a class="sidebar-brand" href="#" data-page="home">
+        <img src="web-a2morning.png" alt="" class="brand-logo">
+        <span><strong>A2 MORNING</strong><small>MATKA</small></span>
+      </a>
+      <nav class="side-nav" aria-label="Main navigation">
+        <div class="nav-caption">MENU</div>
+        <button class="nav-link active" type="button" data-page="home"><span class="nav-icon" aria-hidden="true">🏠</span>Home</button>
+        <button class="nav-link" type="button" data-page="profile"><span class="nav-icon" aria-hidden="true">👤</span>My Profile</button>
+        <button class="nav-link" type="button" data-page="bids"><span class="nav-icon" aria-hidden="true">▧</span>Bids History</button>
+        <button class="nav-link" type="button" data-page="points"><span class="nav-icon" aria-hidden="true">◈</span>Points History</button>
+        <button class="nav-link" type="button" data-page="deposit"><span class="nav-icon" aria-hidden="true">＋</span>Deposit Points</button>
+        <button class="nav-link" type="button" data-page="withdraw"><span class="nav-icon" aria-hidden="true">↗</span>Withdraw Points</button>
+        <div class="nav-caption nav-caption-spaced">MORE</div>
+        <button class="nav-link" type="button" data-page="notices"><span class="nav-icon" aria-hidden="true">📢</span>Emergency Notice</button>
+        <button class="nav-link" type="button" data-page="rates"><span class="nav-icon" aria-hidden="true">🏷️</span>Market Rates</button>
+        <button class="nav-link" type="button" data-action="share-app"><span class="nav-icon" aria-hidden="true">🔗</span>Share Our App</button>
+        <button class="nav-link" type="button" data-action="change-password"><span class="nav-icon" aria-hidden="true">🔑</span>Change Password</button>
+        <button class="nav-link" type="button" data-page="policy"><span class="nav-icon" aria-hidden="true">⚠️</span>Privacy &amp; Policy</button>
+        <button class="nav-link" type="button" data-action="open-results-website"><span class="nav-icon" aria-hidden="true">🌐</span>Website</button>
+        <button class="nav-link nav-link-logout" id="logout-button" type="button"><span class="nav-icon" aria-hidden="true">⚡</span>Log Out</button>
+        <button class="nav-link nav-link-howto" type="button" data-page="howto"><span class="nav-icon" aria-hidden="true">▶️</span>How to Play</button>
+        <div class="nav-caption nav-caption-spaced">ACCOUNT ACTIVITY</div>
+        <button class="nav-link" type="button" data-page="markets"><span class="nav-icon" aria-hidden="true">▦</span>Games &amp; Markets</button>
+      </nav>
+    </aside>
+
+    <section class="main-column">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="menu-toggle" type="button" aria-label="Open navigation">☰</button>
+        <div class="aia-mobile-brand"><img src="web-a2morning.png" alt=""><strong>A2 MORNING</strong><span class="aia-online"><i></i>ACTIVE</span></div>
+        <div class="aia-mobile-balance"><img src="web-icon-coin.png" alt=""><strong id="aia-header-balance">₹ 0</strong></div>
+        <button class="aia-mobile-notices" type="button" data-page="notices" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
+        <div class="breadcrumb"><span>A2 MORNING</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
+        <div class="top-actions">
+          <button class="icon-button notice-button" type="button" data-page="notices" aria-label="Notices">♧<span class="notification-dot"></span></button>
+          <button class="user-chip" type="button" data-page="profile"><span class="avatar" id="header-avatar">K</span><span class="user-chip-copy"><strong id="header-name">Player</strong><small>My account</small></span><span class="chevron">⌄</span></button>
+        </div>
+      </header>
+      <div class="content-wrap">
+        <div id="page-content"></div>
+        <footer class="page-footer"><span>© <span id="current-year"></span> A2 MORNING</span><span>Play responsibly · 18+</span></footer>
+      </div>
+    </section>
+    <nav class="mobile-bottom-nav" aria-label="App navigation">
+      <button type="button" data-page="points" aria-label="Points"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg></span><small>Points</small></button>
+      <button type="button" data-page="bids" aria-label="Bids"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v6h6M9 13h6m-6 4h6"/></svg></span><small>Bids</small></button>
+      <button class="aia-game-nav active" type="button" data-page="markets" aria-label="Games"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 8.5h9.6a4.2 4.2 0 0 1 4 3l1 3.7a2.2 2.2 0 0 1-3.5 2.3l-2.1-1.7H7.8l-2.1 1.7a2.2 2.2 0 0 1-3.5-2.3l1-3.7a4.2 4.2 0 0 1 4-3Z"/><path d="M7.5 10.8v4m-2-2h4m7.3-.5h.1m2 2h.1"/></svg></span><small>Games</small></button>
+      <button type="button" data-page="deposit" aria-label="Wallet"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5h15a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h13v4"/><path d="M16 12.5h5m-4 0h.1"/></svg></span><small>Wallet</small></button>
+      <button type="button" data-page="support" aria-label="Support"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></span><small>Support</small></button>
+    </nav>
+  </div>
+  <section id="exit-dialog" class="exit-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="exit-dialog-title">
+    <div class="exit-dialog-card">
+      <button class="exit-dialog-close" type="button" data-action="exit-dialog-close" aria-label="Close dialog">×</button>
+      <span class="exit-dialog-icon" aria-hidden="true">↩</span>
+      <h2 id="exit-dialog-title">Leave A2 MORNING?</h2>
+      <p>Are you sure you want to close the application?</p>
+      <div class="exit-dialog-actions">
+        <button class="exit-dialog-cancel" type="button" data-action="exit-dialog-cancel">No, stay</button>
+        <button class="exit-dialog-confirm" type="button" data-action="exit-dialog-confirm">Yes, close</button>
+      </div>
+    </div>
+  </section>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+</body>
 </html>

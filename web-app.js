@@ -619,6 +619,7 @@ function decodeFirebaseObject(value) {
 
 function showAuth(mode = "signup") {
   state.authMode = mode;
+  query("#startup-view").classList.add("hidden");
   query("#auth-view").classList.remove("hidden");
   query("#app-view").classList.add("hidden");
   query("#auth-form").reset();
@@ -937,6 +938,7 @@ function restoreSession() {
       state.user = user;
       return true;
     }
+    localStorage.removeItem("a2MorningUser");
   } catch {
     localStorage.removeItem("a2MorningUser");
   }
@@ -990,20 +992,20 @@ async function enterApp(verifyRestoredAccount = false) {
   if (!state.user) return;
   if (verifyRestoredAccount) {
     const phone = state.user.phone;
-    try {
-      const profile = decodeFirebaseObject(await dbGet(`${DATABASE_ROOTS.users}/${phonePath(phone)}`)) || {};
-      const blocked = isBlockedValue(profile.blocked)
-        || isBlockedValue(await dbGet(`Blocked/${phonePath(phone)}`));
-      if (!state.user || state.user.phone !== phone) return;
-      if (blocked) {
-        state.accountBlocked = true;
-        logout();
-        notify("This account has been blocked. Contact support for help.", "error");
-        return;
-      }
-    } catch (error) {
+    const profile = decodeFirebaseObject(await dbGet(`${DATABASE_ROOTS.users}/${phonePath(phone)}`));
+    if (!profile || typeof profile !== "object") {
+      localStorage.removeItem("a2MorningUser");
+      state.user = null;
+      showAuth("signup");
+      return;
+    }
+    const blocked = isBlockedValue(profile.blocked)
+      || isBlockedValue(await dbGet(`Blocked/${phonePath(phone)}`));
+    if (!state.user || state.user.phone !== phone) return;
+    if (blocked) {
+      state.accountBlocked = true;
       logout();
-      notify(error.message || "Could not verify account access.", "error");
+      notify("This account has been blocked. Contact support for help.", "error");
       return;
     }
   }
@@ -1025,6 +1027,7 @@ async function enterApp(verifyRestoredAccount = false) {
   state.depositHistory = [];
   state.withdrawalHistory = [];
   query("#auth-view").classList.add("hidden");
+  query("#startup-view").classList.add("hidden");
   query("#app-view").classList.remove("hidden");
   query("#sidebar").classList.remove("open");
   query("#drawer-scrim").classList.remove("visible");
@@ -3111,27 +3114,46 @@ function notifyNativeAppReady() {
   window.ReactNativeWebView?.postMessage(JSON.stringify({ type: "app-ready" }));
 }
 
-const sharedUserSession = getSharedSessionFromUrl();
-if (sharedUserSession) {
-  state.user = {
-    phone: sharedUserSession.phone,
-    name: sharedUserSession.name
-  };
-  localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
-  void enterApp(true)
-    .catch(error => notify(error.message || "Could not restore the signed-in account.", "error"))
-    .finally(notifyNativeAppReady);
-  void loadAdminSettings().catch(error => {
-    notify(error.message || "Unable to load support settings.", "error");
-  });
-} else if (restoreSession()) {
-  void enterApp(true)
-    .catch(error => notify(error.message || "Could not restore the signed-in account.", "error"))
-    .finally(notifyNativeAppReady);
-} else {
-  showAuth("signup");
-  notifyNativeAppReady();
-  void loadAdminSettings().catch(error => {
-    notify(error.message || "Unable to load support settings.", "error");
-  });
+function showStartupError(error) {
+  query("#startup-view").classList.remove("hidden");
+  query("#auth-view").classList.add("hidden");
+  query("#app-view").classList.add("hidden");
+  query("#startup-message").textContent = `Could not verify your saved account: ${error.message || "Please check your connection and try again."}`;
+  query("#startup-retry").classList.remove("hidden");
 }
+
+async function startApplication() {
+  query("#startup-view").classList.remove("hidden");
+  query("#startup-message").textContent = "Checking your account…";
+  query("#startup-retry").classList.add("hidden");
+
+  const sharedUserSession = getSharedSessionFromUrl();
+  if (sharedUserSession) {
+    state.user = {
+      phone: sharedUserSession.phone,
+      name: sharedUserSession.name
+    };
+    localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
+  } else if (!restoreSession()) {
+    showAuth("signup");
+    notifyNativeAppReady();
+    void loadAdminSettings().catch(error => {
+      notify(error.message || "Unable to load support settings.", "error");
+    });
+    return;
+  }
+
+  void loadAdminSettings().catch(error => {
+    notify(error.message || "Unable to load support settings.", "error");
+  });
+  try {
+    await enterApp(true);
+  } catch (error) {
+    showStartupError(error);
+  } finally {
+    notifyNativeAppReady();
+  }
+}
+
+query("#startup-retry").addEventListener("click", () => void startApplication());
+void startApplication();

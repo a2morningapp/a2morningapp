@@ -8,14 +8,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="web-styles.css">
+  <link rel="stylesheet" href="web-styles.css?v=account-startup-check-v2">
   <link rel="stylesheet" href="web-native-app.css">
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
-  <script src="web-app.js?v=a2-wallet-api-v1" defer></script>
+  <script src="web-app.js?v=account-startup-check-v2" defer></script>
 </head>
 <body>
-  <main id="auth-view" class="auth-shell">
+  <section id="startup-view" class="startup-view" role="status" aria-live="polite">
+    <img src="web-a2morning.png" alt="" class="startup-logo">
+    <strong>A2 MORNING</strong>
+    <span class="startup-spinner" aria-hidden="true"></span>
+    <p id="startup-message">Checking your account…</p>
+    <button id="startup-retry" class="button button-secondary hidden" type="button">Try again</button>
+  </section>
+  <main id="auth-view" class="auth-shell hidden">
     <section class="auth-brand">
       <a class="brand-lockup" href="#" aria-label="A2 MORNING home">
         <img src="web-a2morning.png" alt="" class="brand-logo">
