@@ -1,14 +1,14 @@
 const firebaseConfig = {
-  apiKey: "AIzaSyBdX_r3mBMjQx-NV7hBMw1zOP2gRN1Ak7E",
-  authDomain: "mama567-28fdd.firebaseapp.com",
-  databaseURL: "https://mama567-28fdd-default-rtdb.firebaseio.com",
-  projectId: "mama567-28fdd",
-  storageBucket: "mama567-28fdd.firebasestorage.app",
-  messagingSenderId: "605604678953",
-  appId: "1:605604678953:web:e37e642214d38210747b38",
-  measurementId: "G-YDYPVM7CB5"
+  apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
+  authDomain: "a2moring.firebaseapp.com",
+  databaseURL: "https://a2moring-default-rtdb.firebaseio.com",
+  projectId: "a2moring",
+  storageBucket: "a2moring.firebasestorage.app",
+  messagingSenderId: "528466835850",
+  appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
+  measurementId: "G-2HVR18MNEZ"
 };
-const DEFAULT_WEBSITE_URL = "https://mama567.bond";
+const DEFAULT_WEBSITE_URL = "https://a2morningapp.vercel.app";
 
 if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
@@ -306,16 +306,16 @@ function paymentApiRequest(parameters) {
     endpoint.hostname.endsWith(".cloudfunctions.net")
     || endpoint.hostname.endsWith(".a.run.app")
   ) && /^\/[A-Za-z][A-Za-z0-9_-]*$/.test(endpoint.pathname);
-  const isMama567PhpUrl = (
+  const isA2PhpUrl = (
     endpoint.hostname === "mama567.bond"
     || endpoint.hostname.endsWith(".mama567.bond")
-  ) && /(?:^|\/)payment-api\.php$/i.test(endpoint.pathname);
+  ) && /(?:^|\/)a2-payment-api\.php$/i.test(endpoint.pathname);
   if (endpoint.protocol !== "https:" || endpoint.search || endpoint.hash
-      || (!isAppsScriptUrl && !isCloudFunctionUrl && !isMama567PhpUrl)) {
+      || (!isAppsScriptUrl && !isCloudFunctionUrl && !isA2PhpUrl)) {
     return Promise.reject(new Error("The configured payment service URL is invalid."));
   }
   return new Promise((resolve, reject) => {
-    const callbackName = `__mama567Payment_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const callbackName = `__a2Payment_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const script = document.createElement("script");
     const timeout = window.setTimeout(() => finish(new Error("The payment service did not respond in time.")), 25000);
     const finish = error => {
@@ -349,7 +349,7 @@ function paymentHostMessage(message) {
 }
 
 function pendingPaymentKey(phone) {
-  return `mama567.pendingPayment:${phone}`;
+  return `a2morning.pendingPayment:${phone}`;
 }
 
 function readPendingPayment(phone) {
@@ -630,7 +630,7 @@ function showAuth(mode = "signup") {
   query("#auth-eyebrow").textContent = mode === "signup" ? "GET STARTED" : "YOUR ACCOUNT";
   query("#auth-title").textContent = mode === "signup" ? "Register now" : "Start secure login";
   query("#auth-subtitle").textContent = mode === "signup"
-    ? "Enter your details to set up your MAMA567 account."
+    ? "Enter your details to set up your A2 MORNING account."
     : "Enter mobile number to continue.";
   query("#auth-submit").innerHTML = mode === "signup" ? "Register now <span aria-hidden=\"true\">→</span>" : "Proceed <span aria-hidden=\"true\">→</span>";
   queryAll(".auth-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.authMode === mode));
@@ -844,7 +844,7 @@ async function ensureUserBalance(profilePath) {
   if (!window.firebase?.database) {
     throw new Error("The account balance could not be initialized because the service is unavailable.");
   }
-  const balanceRef = firebase.database().ref(`${profilePath}/bal`);
+  const balanceRef = firebase.database().ref(`${profilePath}/COINS`);
   const existingBalance = await balanceRef.once("value");
   if (existingBalance.exists()) return decodeFirebaseValue(existingBalance.val());
 
@@ -893,9 +893,9 @@ async function submitAuth(event) {
       const joinedDate = `${String(joinedAt.getDate()).padStart(2, "0")}-${String(joinedAt.getMonth() + 1).padStart(2, "0")}-${joinedAt.getFullYear()}`;
       await dbPatchAndVerify({
         [recordPath]: {
-          name: JSON.stringify(name),
-          password: JSON.stringify(password),
-          bal: state.signUpBonus,
+          name,
+          password,
+          COINS: String(state.signUpBonus),
           B2: "0",
           TD: "0",
           TW: "0",
@@ -903,20 +903,24 @@ async function submitAuth(event) {
           push: "",
           blocked: "no"
         },
-        [`${DATABASE_ROOTS.newUsers}/${joinedDate}/${phone}`]: name
+        [`${DATABASE_ROOTS.newUsers}/${joinedDate}/${phone}`]: [
+          name,
+          phone,
+          `${String((joinedAt.getHours() % 12) || 12).padStart(2, "0")}:${String(joinedAt.getMinutes()).padStart(2, "0")}:${String(joinedAt.getSeconds()).padStart(2, "0")} ${joinedAt.getHours() >= 12 ? "pm" : "am"}`
+        ]
       });
       state.user = { phone, name };
-      localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+      localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
       await enterApp();
       notify("Your account is ready.");
       return;
     }
 
-    if (!record || typeof record !== "object" || String(record.password ?? "") !== password) {
+    if (!record || typeof record !== "object" || String(decodeFirebaseValue(record.password) ?? "") !== password) {
       throw new Error("Phone number or password is incorrect.");
     }
     state.user = { phone, name: String(record.name || "Player") };
-    localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+    localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
     await enterApp();
     notify(`Welcome back, ${state.user.name}.`);
   } catch (error) {
@@ -928,13 +932,13 @@ async function submitAuth(event) {
 
 function restoreSession() {
   try {
-    const user = JSON.parse(localStorage.getItem("kalyanGoldUser") || "null");
+    const user = JSON.parse(localStorage.getItem("a2MorningUser") || "null");
     if (user && /^\d{10}$/.test(user.phone) && typeof user.name === "string") {
       state.user = user;
       return true;
     }
   } catch {
-    localStorage.removeItem("kalyanGoldUser");
+    localStorage.removeItem("a2MorningUser");
   }
   return false;
 }
@@ -977,7 +981,7 @@ function logout() {
   state.pointsHistory = [];
   state.depositHistory = [];
   state.withdrawalHistory = [];
-  localStorage.removeItem("kalyanGoldUser");
+  localStorage.removeItem("a2MorningUser");
   showAuth("login");
   query("#sidebar").classList.remove("open");
 }
@@ -1050,7 +1054,7 @@ async function recordLastSeen() {
   await dbPut(`${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/Last Seen`, new Date().toISOString());
 }
 
-window.__mama567NativePushId = pushId => {
+window.__a2NativePushId = pushId => {
   if (!state.user) return;
   const path = `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/push`;
   void dbPutAndVerify(path, String(pushId || ""))
@@ -1066,11 +1070,11 @@ async function refreshUserData() {
   if (!state.user || state.user.phone !== phoneNumber) return;
   if (profile && profile.name && profile.name !== state.user.name) {
     state.user.name = profile.name;
-    localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+    localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
     query("#header-name").textContent = profile.name;
     query("#header-avatar").textContent = profile.name.trim().charAt(0).toUpperCase() || "K";
   }
-  state.balancePath = `${profilePath}/bal`;
+  state.balancePath = `${profilePath}/COINS`;
   const balance = await ensureUserBalance(profilePath);
   if (!state.user || state.user.phone !== phoneNumber) return;
   state.balance = Number(decodeFirebaseValue(balance) ?? 0) || 0;
@@ -1339,12 +1343,12 @@ function applyRealtimeValue(path, value) {
     if (!profile || typeof profile !== "object") return;
     if (profile.name) {
       state.user.name = String(profile.name);
-      localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+      localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
       query("#header-name").textContent = state.user.name;
       query("#header-avatar").textContent = state.user.name.trim().charAt(0).toUpperCase() || "K";
     }
-    state.balancePath = `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/bal`;
-    state.balance = Number(profile.bal || 0);
+    state.balancePath = `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/COINS`;
+    state.balance = Number(decodeFirebaseValue(profile.COINS) || 0);
     state.accountBlocked = false;
   }
 }
@@ -1505,7 +1509,7 @@ function setPage(page, recordHistory = true) {
   };
   const pageTitle = labels[page] || "Home";
   query("#page-breadcrumb").textContent = pageTitle;
-  query(".aia-mobile-brand strong").textContent = page === "home" ? "MAMA567" : pageTitle;
+  query(".aia-mobile-brand strong").textContent = page === "home" ? "A2 MORNING" : pageTitle;
   renderPage();
   if (page === "points" || page === "deposit" || page === "withdraw") {
     void loadWalletRequests(page).then(renderPage).catch(error => {
@@ -1547,8 +1551,8 @@ function handleAppBack() {
   showExitDialog();
 }
 
-window.__mama567HandleBack = handleAppBack;
-window.__mama567PaymentReturned = () => {
+window.__a2HandleBack = handleAppBack;
+window.__a2PaymentReturned = () => {
   if (!state.user) return;
   try {
     const order = readPendingPayment(state.user.phone);
@@ -1559,8 +1563,8 @@ window.__mama567PaymentReturned = () => {
 };
 window.addEventListener("message", event => {
   if (event.source !== window.parent) return;
-  if (event.data === "mama567:back") handleAppBack();
-  if (event.data === "mama567:payment-returned") window.__mama567PaymentReturned();
+  if (event.data === "a2morning:back") handleAppBack();
+  if (event.data === "a2morning:payment-returned") window.__a2PaymentReturned();
 });
 
 async function renderPage() {
@@ -1791,13 +1795,13 @@ function expertGuessFor(market) {
 }
 
 function guessRevealKey(market) {
-  return `mama567.expertGuess:${state.user?.phone || "guest"}:${market.name.trim().toLocaleLowerCase()}`;
+  return `a2morning.expertGuess:${state.user?.phone || "guest"}:${market.name.trim().toLocaleLowerCase()}`;
 }
 
 function legacyGuessRevealKey(market) {
   const now = marketNow();
   const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  return `mama567.expertGuess:${state.user?.phone || "guest"}:${dateKey}:${market.name.trim().toLocaleLowerCase()}`;
+  return `a2morning.expertGuess:${state.user?.phone || "guest"}:${dateKey}:${market.name.trim().toLocaleLowerCase()}`;
 }
 
 function getRevealedGuess(market) {
@@ -2251,7 +2255,7 @@ function renderNotices() {
 
 function renderPolicy() {
   const paragraphs = state.policy.split(/\n{2,}/).map(item => item.trim()).filter(Boolean);
-  return `<section class="policy-page"><header class="policy-page-heading"><p>ACCOUNT INFORMATION</p><h1>Privacy &amp; policy</h1><span>Privacy information published for MAMA567.</span></header>${paragraphs.length
+  return `<section class="policy-page"><header class="policy-page-heading"><p>ACCOUNT INFORMATION</p><h1>Privacy &amp; policy</h1><span>Privacy information published for A2 MORNING.</span></header>${paragraphs.length
     ? `<section class="panel policy-content">${paragraphs.map(paragraph => `<p>${safeText(paragraph)}</p>`).join("")}</section>`
     : `<div class="empty-state"><strong>Policy is not available</strong>The administrator has not published privacy information yet.</div>`}</section>`;
 }
@@ -2283,7 +2287,7 @@ function renderProfile() {
         <label class="field">Full name<input name="name" type="text" required maxlength="60" value="${safeText(state.user.name)}"></label>
         <label class="field">Phone number<input type="tel" value="+91 ${safeText(state.user.phone)}" disabled></label>
         <button class="button button-primary" type="submit">Save details</button><p class="inline-message" id="profile-message"></p>
-      </form></section>${window.ReactNativeWebView ? `<section class="panel"><div class="panel-heading"><h2>Push notifications</h2></div><p class="muted">Enable notifications to receive updates from MAMA567 on this device.</p><button class="button button-secondary" type="button" data-action="enable-push">Enable notifications</button></section>` : ""}</section>
+      </form></section>${window.ReactNativeWebView ? `<section class="panel"><div class="panel-heading"><h2>Push notifications</h2></div><p class="muted">Enable notifications to receive updates from A2 MORNING on this device.</p><button class="button button-secondary" type="button" data-action="enable-push">Enable notifications</button></section>` : ""}</section>
       <section class="panel"><div class="panel-heading"><h2>Change password</h2></div><form id="password-form" class="form-stack">
         <label class="field">Current password<input name="currentPassword" type="password" required autocomplete="current-password"></label>
         <label class="field">New password<input name="newPassword" type="password" minlength="8" required autocomplete="new-password"></label>
@@ -2623,9 +2627,9 @@ async function saveProfile(event) {
   }
   try {
     const phone = phonePath(state.user.phone);
-    await dbPutAndVerify(`${DATABASE_ROOTS.users}/${phone}/name`, JSON.stringify(name));
+    await dbPutAndVerify(`${DATABASE_ROOTS.users}/${phone}/name`, name);
     state.user.name = name;
-    localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+    localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
     query("#header-name").textContent = name;
     query("#header-avatar").textContent = name.charAt(0).toUpperCase();
     setInlineMessage("profile-message", "Your details were updated.", true);
@@ -2657,7 +2661,7 @@ async function changePassword(event) {
       setInlineMessage("password-message", "Current password is incorrect.");
       return;
     }
-    await dbPutAndVerify(`${DATABASE_ROOTS.users}/${phone}/password`, JSON.stringify(newPassword));
+    await dbPutAndVerify(`${DATABASE_ROOTS.users}/${phone}/password`, newPassword);
     setInlineMessage("password-message", "Password updated.", true);
     form.reset();
   } catch (error) {
@@ -2682,8 +2686,8 @@ async function refreshAll() {
 
 async function shareApp() {
   const shareData = {
-    title: "MAMA567",
-    text: "Open MAMA567",
+    title: "A2 MORNING",
+    text: "Open A2 MORNING",
     url: window.location.href
   };
   try {
@@ -2901,7 +2905,7 @@ function handleClick(event) {
       notify("Push notifications are available in the native app.", "error");
       return;
     }
-    window.__mama567PushResult = result => {
+    window.__a2PushResult = result => {
       if (result.enabled) notify("Push notifications are enabled on this device.");
       else notify(result.error || "Push notifications were not enabled.", "error");
     };
@@ -2954,7 +2958,7 @@ function handleClick(event) {
     try {
       state.supportDialogVisible = false;
       void renderPage();
-      openWhatsApp("Hello, I need help with my MAMA567 account.");
+      openWhatsApp("Hello, I need help with my A2 MORNING account.");
     } catch (error) {
       notify(error.message || "Unable to open WhatsApp.", "error");
     }
@@ -3113,7 +3117,7 @@ if (sharedUserSession) {
     phone: sharedUserSession.phone,
     name: sharedUserSession.name
   };
-  localStorage.setItem("kalyanGoldUser", JSON.stringify(state.user));
+  localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
   void enterApp(true)
     .catch(error => notify(error.message || "Could not restore the signed-in account.", "error"))
     .finally(notifyNativeAppReady);
