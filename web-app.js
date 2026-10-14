@@ -2566,8 +2566,6 @@ async function startPayment(event) {
   }
   const button = event.target.querySelector("button[type=submit]");
   setBusy(button, true, "Creating secure payment…");
-  const hostedPreview = window.parent !== window;
-  const checkoutWindow = window.ReactNativeWebView || hostedPreview ? null : window.open("about:blank", "_blank");
   try {
     const result = await paymentApiRequest({ action: "create", phone, amount: amountText });
     let checkout;
@@ -2588,15 +2586,10 @@ async function startPayment(event) {
       createdAt: new Date().toISOString()
     };
     savePendingPayment(order);
-    if (checkoutWindow && !checkoutWindow.closed) {
-      checkoutWindow.location.replace(checkout.href);
-    } else if (!window.ReactNativeWebView && !hostedPreview) {
-      window.location.assign(checkout.href);
-    }
-    startPaymentStatusPolling(order, true, checkoutWindow);
+    startPaymentStatusPolling(order, false);
+    window.location.assign(checkout.href);
     notify("Payment page opened. Waiting for gateway confirmation.");
   } catch (error) {
-    if (checkoutWindow && !checkoutWindow.closed) checkoutWindow.close();
     notify(error.message || "Could not start the payment.", "error");
   } finally {
     setBusy(button, false);
