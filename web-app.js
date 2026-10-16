@@ -14,6 +14,21 @@ if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
+const MATKA60_RESULTS_CONFIG = {
+  apiKey: "AIzaSyCGqJ1XvEYbgJ_eN5OEuzAymc3E4wKr8eI",
+  authDomain: "a2morning-web-result.firebaseapp.com",
+  databaseURL: "https://a2morning-web-result-default-rtdb.firebaseio.com",
+  projectId: "a2morning-web-result",
+  storageBucket: "a2morning-web-result.firebasestorage.app",
+  messagingSenderId: "807940358876",
+  appId: "1:807940358876:web:37d5de4963837b8783aa19",
+  measurementId: "G-FD7MK1CWCK"
+};
+const matka60FirebaseApp = window.firebase
+  ? firebase.apps.find(app => app.name === "matka60-results")
+    || firebase.initializeApp(MATKA60_RESULTS_CONFIG, "matka60-results")
+  : null;
+
 const DATABASE_ROOTS = {
   users: "DATA",
   marketBuckets: ["GAMES", "GAMES2", "GAMES3"],
@@ -91,6 +106,7 @@ const state = {
   balance: 0,
   balancePath: "",
   accountBlocked: false,
+  userHistoryLoaded: false,
   markets: [],
   marketLoadError: "",
   paymentQrCode: "",
@@ -141,7 +157,21 @@ const state = {
   maintenance: false,
   newRegistrations: true,
   openBets: true,
-  closeBets: true
+  closeBets: true,
+  matka60ServerOffsetMs: null,
+  matka60ClockSynced: false,
+  matka60Results: {},
+  matka60ResultsPeriodId: "",
+  matka60ResultsError: "",
+  matka60BidSettlements: {},
+  matka60SettlementInFlight: false,
+  matka60RoundId: "",
+  matka60BetType: "ank",
+  matka60Digit: "0",
+  matka60SelectedPannas: [],
+  matka60Amount: 50,
+  matka60HistoryTab: "game",
+  matka60HelpVisible: false
 };
 const realtimeSources = new Map();
 const realtimeTimers = new Map();
@@ -151,6 +181,8 @@ let realtimeUserPhone = "";
 let activeMarketBucket = "";
 const activePaymentChecks = new Map();
 const pageHistory = [];
+let matka60ClockRef = null;
+let matka60ResultsRef = null;
 
 const query = (selector, root = document) => root.querySelector(selector);
 const queryAll = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -977,10 +1009,14 @@ function logout() {
   state.balance = 0;
   state.balancePath = "";
   state.accountBlocked = false;
+  state.userHistoryLoaded = false;
   state.accountBlocked = false;
   state.bids = [];
   state.accountTransactions = [];
   state.pointsHistory = [];
+  state.matka60BidSettlements = {};
+  stopMatka60Feed();
+  state.matka60SettlementInFlight = false;
   state.depositHistory = [];
   state.withdrawalHistory = [];
   localStorage.removeItem("a2MorningUser");
@@ -1021,9 +1057,11 @@ async function enterApp(verifyRestoredAccount = false) {
   state.balance = 0;
   state.balancePath = "";
   state.accountBlocked = false;
+  state.userHistoryLoaded = false;
   state.bids = [];
   state.accountTransactions = [];
   state.pointsHistory = [];
+  state.matka60BidSettlements = {};
   state.depositHistory = [];
   state.withdrawalHistory = [];
   query("#auth-view").classList.add("hidden");
@@ -1039,6 +1077,7 @@ async function enterApp(verifyRestoredAccount = false) {
   resumePendingPayment();
   await renderPage();
   startRealtimeSubscriptions();
+  startMatka60Feed();
   const phone = state.user.phone;
   void Promise.allSettled([refreshUserData(), loadGlobalData()]).then(async outcomes => {
     if (!state.user || state.user.phone !== phone) return;
@@ -1089,7 +1128,12 @@ async function refreshUserData() {
   if (!state.user || state.user.phone !== phoneNumber) return;
   state.bids = userHistoryRecords(bids, bidRecords);
   state.accountTransactions = normalizeAccountTransactions(transactions);
+  state.matka60BidSettlements = profile?.matka60BidSettlements
+    && typeof profile.matka60BidSettlements === "object"
+    ? profile.matka60BidSettlements : {};
+  state.userHistoryLoaded = true;
   updatePointsHistory();
+  void settleMatka60FinalizedRounds();
 }
 
 function normalizeAccountTransactions(value) {
@@ -1217,6 +1261,7 @@ async function loadGlobalData() {
     : [{ id: "Notice", title: "Notice", message: String(decodeFirebaseValue(notice)) }];
   state.rates = decodeFirebaseObject(rates);
   applyAdminSettings(settings);
+  if (state.rates !== null && state.rates !== undefined) void settleMatka60FinalizedRounds();
 }
 
 function stopRealtimeSubscriptions() {
@@ -1336,6 +1381,7 @@ function applyRealtimeValue(path, value) {
   }
   if (path === DATABASE_ROOTS.rates) {
     state.rates = decodeFirebaseObject(value);
+    void settleMatka60FinalizedRounds();
     return;
   }
   if (path === DATABASE_ROOTS.settings) {
@@ -1425,6 +1471,410 @@ function marketNow() {
   return new Date(state.marketTimestamp.getTime() + Date.now() - state.marketTimestampReceivedAt);
 }
 
+function matka60ServerNow() {
+  return state.matka60ClockSynced
+    ? Date.now() + state.matka60ServerOffsetMs
+    : null;
+}
+
+function matka60PeriodId(timestamp) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date(timestamp));
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}${values.month}${values.day}${values.hour}${values.minute}`;
+}
+
+function matka60RoundLabel(periodId) {
+  if (!/^\d{12}$/.test(periodId)) return periodId;
+  const date = new Date(
+    Date.UTC(
+      Number(periodId.slice(0, 4)),
+      Number(periodId.slice(4, 6)) - 1,
+      Number(periodId.slice(6, 8)),
+      Number(periodId.slice(8, 10)),
+      Number(periodId.slice(10, 12))
+    ) - 330 * 60000
+  );
+  return Number.isNaN(date.getTime())
+    ? periodId
+    : date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+}
+
+function matka60PreviousPeriodId(timestamp) {
+  return matka60PeriodId(timestamp - 60000);
+}
+
+function startMatka60Feed() {
+  if (!state.user || !matka60FirebaseApp || matka60ClockRef) return;
+  const database = matka60FirebaseApp.database();
+  state.matka60ClockSynced = false;
+  matka60ClockRef = database.ref(".info/serverTimeOffset");
+  matka60ClockRef.on("value", snapshot => {
+    const offset = Number(snapshot.val());
+    state.matka60ClockSynced = Number.isFinite(offset);
+    state.matka60ServerOffsetMs = state.matka60ClockSynced ? offset : null;
+    syncMatka60ResultsFeed();
+    updateMatka60Clock();
+  }, error => {
+    state.matka60ClockSynced = false;
+    state.matka60ResultsError = `Shared clock unavailable: ${error.message || error}`;
+    updateMatka60Clock();
+  });
+}
+
+function syncMatka60ResultsFeed() {
+  const serverNow = matka60ServerNow();
+  if (!matka60FirebaseApp || serverNow === null) return;
+  const completedPeriodId = matka60PreviousPeriodId(serverNow);
+  if (completedPeriodId === state.matka60ResultsPeriodId) return;
+  matka60ResultsRef?.off();
+  state.matka60ResultsPeriodId = completedPeriodId;
+  state.matka60Results = {};
+  state.matka60ResultsError = "";
+  matka60ResultsRef = matka60FirebaseApp.database()
+    .ref("matka60/rounds")
+    .orderByKey()
+    .endAt(completedPeriodId)
+    .limitToLast(30);
+  matka60ResultsRef.on("value", snapshot => {
+    state.matka60Results = snapshot.val() || {};
+    state.matka60ResultsError = "";
+    void settleMatka60FinalizedRounds();
+    if (state.page === "matka60") void renderPage();
+  }, error => {
+    state.matka60ResultsError = `Could not load official results: ${error.message || error}`;
+    if (state.page === "matka60") void renderPage();
+  });
+}
+
+function stopMatka60Feed() {
+  matka60ClockRef?.off();
+  matka60ResultsRef?.off();
+  matka60ClockRef = null;
+  matka60ResultsRef = null;
+  state.matka60ResultsPeriodId = "";
+  state.matka60Results = {};
+  state.matka60ClockSynced = false;
+  state.matka60ServerOffsetMs = null;
+}
+
+function matka60PannasForDigit(digit) {
+  return [...SANGAM_PANA_SET]
+    .filter(number => String(number.split("").reduce((sum, value) => sum + Number(value), 0) % 10) === digit)
+    .sort();
+}
+
+function matka60ValidResult(record) {
+  const rawValue = typeof record === "string"
+    ? record
+    : record && typeof record === "object" ? String(record.result || "") : "";
+  const value = rawValue.trim().replace(/^(\d)-(\d)-(\d)$/, "$1$2$3");
+  return /^\d{3}$/.test(value) ? value : "";
+}
+
+function matka60ResultIsFinalized(record) {
+  return Boolean(record && typeof record === "object" && record.finalized === true);
+}
+
+function matka60RateFor(gameType) {
+  const labels = ["Single Digit", "Double Digit", "Single Pana", "Double Pana", "Triple Pana"];
+  const target = String(gameType || "").trim().toLowerCase();
+  const row = toRecords(state.rates).find(rate => {
+    const label = String(rate.name || rate.game || labels[Number(rate.id) - 1] || rate.id)
+      .trim()
+      .toLowerCase();
+    return label === target;
+  });
+  const value = Number(row?.rate ?? row?.value);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function matka60BetSettlement(bid, result) {
+  const payload = Array.isArray(bid.payload) ? bid.payload : [];
+  const gameType = String(payload[0] || bid.gameType || "");
+  const selection = String(payload[2] || bid.selection || "").trim();
+  const amount = Number(payload[3] ?? bid.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  let rateType = "";
+  let won = false;
+  if (/^Matka 60 Ank$/i.test(gameType)) {
+    rateType = "Single Digit";
+    const ank = String([...result].reduce((sum, digit) => sum + Number(digit), 0) % 10);
+    won = selection === ank;
+  } else if (/^Matka 60 Panna$/i.test(gameType) && /^\d{3}$/.test(selection)) {
+    const uniqueDigits = new Set(selection).size;
+    rateType = uniqueDigits === 3 ? "Single Pana"
+      : uniqueDigits === 2 ? "Double Pana" : "Triple Pana";
+    won = selection === result;
+  } else {
+    return null;
+  }
+  const rate = won ? matka60RateFor(rateType) : 0;
+  if (won && rate === null) {
+    throw new Error(`The ${rateType} rate is missing or invalid. This Matka 60 round was not settled.`);
+  }
+  return {
+    gameType,
+    selection,
+    amount,
+    outcome: won ? "Won" : "Lost",
+    rate: won ? rate : 0,
+    payout: won ? Math.round((amount / 10) * rate * 100) / 100 : 0
+  };
+}
+
+function matka60BidSettlementFor(bid) {
+  const periodId = String(bid.payload?.[5] || "");
+  return state.matka60BidSettlements?.[periodId]?.[dbKey(bid.id)] || null;
+}
+
+async function settleMatka60FinalizedRounds() {
+  if (!state.user || !state.userHistoryLoaded || !matka60FirebaseApp
+    || !state.matka60ClockSynced || !state.rates || state.matka60SettlementInFlight) return;
+  const serverNow = matka60ServerNow();
+  if (serverNow === null) return;
+  const lastCompletedPeriod = matka60PreviousPeriodId(serverNow);
+  const rounds = Object.entries(state.matka60Results || {})
+    .filter(([period, record]) => period <= lastCompletedPeriod && matka60ResultIsFinalized(record))
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (!rounds.length) return;
+  const phone = state.user.phone;
+  state.matka60SettlementInFlight = true;
+  try {
+    for (const [periodId, record] of rounds) {
+      if (!state.user || state.user.phone !== phone) return;
+      const result = matka60ValidResult(record);
+      if (!result) continue;
+      const roundBids = state.bids.filter(bid =>
+        String(bid.gameType || "").startsWith("Matka 60")
+          && String(bid.payload?.[5] || "") === periodId
+      );
+      if (!roundBids.length) continue;
+      const settlements = roundBids
+        .map(bid => ({ bid, settlement: matka60BetSettlement(bid, result) }))
+        .filter(item => item.settlement);
+      if (!settlements.length) continue;
+      const profileRef = firebase.database().ref(`${DATABASE_ROOTS.users}/${phonePath(phone)}`);
+      const transactionResult = await profileRef.transaction(profile => {
+        if (!profile || typeof profile !== "object" || Array.isArray(profile)) return;
+        const completedRounds = profile.matka60Settlements
+          && typeof profile.matka60Settlements === "object"
+          ? profile.matka60Settlements : {};
+        if (completedRounds[periodId]) return;
+        const paidBids = profile.matka60BidSettlements
+          && typeof profile.matka60BidSettlements === "object"
+          ? profile.matka60BidSettlements : {};
+        const previousPeriodSettlements = paidBids[periodId];
+        const periodSettlements = previousPeriodSettlements
+          && typeof previousPeriodSettlements === "object"
+          ? { ...previousPeriodSettlements } : {};
+        const transactions = profile.transactions
+          && typeof profile.transactions === "object"
+          ? { ...profile.transactions } : {};
+        const balance = Number(profile.COINS);
+        if (!Number.isFinite(balance) || balance < 0) return;
+        let nextBalance = balance;
+        const processedAt = new Date().toISOString();
+        for (const { bid, settlement } of settlements) {
+          const settlementKey = dbKey(bid.id);
+          if (periodSettlements[settlementKey]) continue;
+          const transactionId = `M60-${periodId}-${settlementKey}`;
+          periodSettlements[settlementKey] = {
+            result,
+            outcome: settlement.outcome,
+            payout: settlement.payout,
+            rate: settlement.rate,
+            processedAt
+          };
+          if (settlement.outcome !== "Won") continue;
+          nextBalance += settlement.payout;
+          transactions[transactionId] = {
+            id: transactionId,
+            type: "Winning",
+            amount: settlement.payout,
+            title: "Matka 60 winning",
+            market: "Matka 60",
+            gameType: settlement.gameType,
+            selection: settlement.selection,
+            period: periodId,
+            result,
+            rate: settlement.rate,
+            date: processedAt,
+            createdAt: processedAt,
+            status: "Credited",
+            note: `Matka 60 · ${settlement.gameType.replace("Matka 60 ", "")} ${settlement.selection} · round ${periodId} · result ${result}`
+          };
+        }
+        profile.COINS = nextBalance;
+        profile.transactions = transactions;
+        profile.matka60BidSettlements = {
+          ...paidBids,
+          [periodId]: periodSettlements
+        };
+        profile.matka60Settlements = {
+          ...completedRounds,
+          [periodId]: { result, processedAt }
+        };
+        return profile;
+      }, undefined, false);
+      if (!state.user || state.user.phone !== phone) return;
+      const profile = transactionResult.snapshot.val() || {};
+      if (!transactionResult.committed && !profile.matka60Settlements?.[periodId]) {
+        throw new Error(`Could not record Matka 60 settlement for round ${periodId}. Check account write permissions and balance data.`);
+      }
+      state.balance = Number(profile.COINS) || 0;
+      state.matka60BidSettlements = profile.matka60BidSettlements || {};
+      state.accountTransactions = normalizeAccountTransactions(profile.transactions);
+      updatePointsHistory();
+      if (transactionResult.committed) {
+        const paid = settlements.reduce((sum, item) => sum + item.settlement.payout, 0);
+        if (paid > 0) {
+          notify(`Matka 60 win credited: ${money(paid)} for round ${periodId}.`);
+        }
+        if (state.page === "points" || state.page === "bids" || state.page === "matka60") {
+          await renderPage();
+        }
+      }
+    }
+  } catch (error) {
+    notify(error.message || "Could not settle Matka 60 results.", "error");
+  } finally {
+    state.matka60SettlementInFlight = false;
+  }
+}
+
+function matka60LatestResult() {
+  const serverNow = matka60ServerNow();
+  if (serverNow === null) return null;
+  const completedPeriod = matka60PreviousPeriodId(serverNow);
+  const result = matka60ValidResult(state.matka60Results[completedPeriod]);
+  return result ? { period: completedPeriod, result } : null;
+}
+
+function updateMatka60Clock() {
+  const serverNow = matka60ServerNow();
+  if (serverNow !== null) syncMatka60ResultsFeed();
+  if (state.page !== "matka60") return;
+  const timer = query("#matka60-time-left");
+  const period = query("#matka60-period");
+  const status = query("#matka60-round-status");
+  const motor = query("#matka60-motor-numbers");
+  if (!timer || !period || !status || !motor) return;
+  if (serverNow === null) {
+    timer.textContent = "--:--";
+    period.textContent = "Syncing";
+    status.textContent = state.matka60ResultsError || "Connecting to the shared game clock…";
+    return;
+  }
+  const roundId = matka60PeriodId(serverNow);
+  const millisecondsLeft = 60000 - (serverNow % 60000);
+  const secondsLeft = Math.ceil(millisecondsLeft / 1000);
+  timer.textContent = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  period.textContent = `#${roundId}`;
+  if (roundId !== state.matka60RoundId) {
+    state.matka60RoundId = roundId;
+    state.matka60SelectedPannas = [];
+    void renderPage();
+    return;
+  }
+  const latestResult = matka60LatestResult();
+  motor.classList.add("is-spinning");
+  motor.innerHTML = Array.from({ length: 3 }, () => `<span>${Math.floor(Math.random() * 10)}</span>`).join("");
+  status.textContent = state.matka60ResultsError
+    || (latestResult
+      ? `Last official result · round #${latestResult.period}: ${latestResult.result}`
+      : "Random motor preview · waiting for the manually published result");
+}
+
+function matka60BetHistoryForPeriod(periodId) {
+  return state.bids.filter(bid =>
+    String(bid.gameType || "").startsWith("Matka 60")
+      && String(bid.payload?.[5] || "") === periodId
+  ).sort((left, right) => String(right.id).localeCompare(String(left.id)));
+}
+
+function renderMatka60History() {
+  if (state.matka60HistoryTab === "bets") {
+    const bets = state.bids
+      .filter(bid => String(bid.gameType || "").startsWith("Matka 60"))
+      .slice()
+      .sort((left, right) => String(right.id).localeCompare(String(left.id)))
+      .slice(0, 30);
+    return `<div class="matka60-history-list">${bets.length
+      ? bets.map(bid => {
+        const settlement = matka60BidSettlementFor(bid);
+        const outcome = settlement
+          ? `${settlement.outcome}${settlement.outcome === "Won" ? ` · ${money(settlement.payout)}` : ""}`
+          : "";
+        return `<div class="matka60-history-row"><span><strong>${safeText(bid.selection)}</strong><small>${safeText(bid.gameType)} · ${safeText(bidTime(bid))}${outcome ? ` · ${safeText(outcome)}` : ""}</small></span><b>${money(bid.amount)}</b></div>`;
+      }).join("")
+      : `<p class="matka60-empty">Your Matka 60 bets will appear here.</p>`}</div>`;
+  }
+  const results = Object.entries(state.matka60Results || {})
+    .map(([period, record]) => ({ period, result: matka60ValidResult(record) }))
+    .filter(item => item.result && item.period < state.matka60RoundId)
+    .sort((left, right) => right.period.localeCompare(left.period))
+    .slice(0, 10);
+  return `<div class="matka60-history-list"><div class="matka60-history-head"><span>PERIOD</span><span>ANK</span><span>RESULT</span></div>${results.length
+    ? results.map(item => `<div class="matka60-history-row matka60-result-row"><span><strong>${safeText(item.period)}</strong><small>${safeText(matka60RoundLabel(item.period))}</small></span><b>${safeText(String((Number(item.result[0]) + Number(item.result[1]) + Number(item.result[2])) % 10))}</b><span class="matka60-result-digits">${item.result.split("").map(digit => `<b>${digit}</b>`).join("")}</span></div>`).join("")
+    : `<p class="matka60-empty">Completed official results will appear here.</p>`}</div>`;
+}
+
+function renderMatka60() {
+  const serverNow = matka60ServerNow();
+  const roundId = serverNow === null ? "" : matka60PeriodId(serverNow);
+  const secondsLeft = serverNow === null ? null : Math.ceil((60000 - (serverNow % 60000)) / 1000);
+  const timerLabel = secondsLeft === null
+    ? "--:--"
+    : `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  if (roundId && roundId !== state.matka60RoundId) state.matka60RoundId = roundId;
+  const latestResult = matka60LatestResult();
+  const selectedPannas = state.matka60SelectedPannas;
+  const currentBets = matka60BetHistoryForPeriod(roundId);
+  const amount = Number(state.matka60Amount);
+  const motorPreview = Array.from({ length: 3 }, () => Math.floor(Math.random() * 10)).join("");
+  const unavailableMessage = state.maintenance
+    ? "Game play is temporarily unavailable during maintenance."
+    : state.accountBlocked ? "This account is blocked from placing games."
+      : state.matka60ResultsError ? "The shared game feed is unavailable. Betting is paused."
+        : !state.matka60ClockSynced ? "Syncing the shared game clock. Betting is paused." : "";
+  const selectionButtons = state.matka60BetType === "ank"
+    ? `<div class="matka60-number-grid">${Array.from({ length: 10 }, (_, digit) => `<button type="button" class="${state.matka60Digit === String(digit) ? "selected" : ""}" data-matka60-number="${digit}">${digit}</button>`).join("")}</div>`
+    : `<p class="matka60-selection-label">SELECT PANNA(S) FOR (${safeText(state.matka60Digit)}) · Selected: ${selectedPannas.length}</p><div class="matka60-panna-grid">${matka60PannasForDigit(state.matka60Digit).map(number => `<button type="button" class="${selectedPannas.includes(number) ? "selected" : ""}" data-matka60-number="${number}">${number}</button>`).join("")}</div>`;
+  const selections = state.matka60BetType === "ank"
+    ? [state.matka60Digit]
+    : selectedPannas;
+  const quickAdds = [10, 50, 100, 500].map(value => `<button type="button" data-matka60-quick-add="${value}">+${value}</button>`).join("");
+  return `<section class="matka60-page">
+    <header class="matka60-header"><button type="button" class="matka60-back" data-action="matka60-back" aria-label="Back">‹</button><h1>Matka 60</h1><button type="button" class="matka60-help" data-action="matka60-help">? HOW TO PLAY</button></header>
+    <section class="matka60-balance"><div><small>TOTAL BALANCE</small><strong>${money(state.balance)}</strong></div><button type="button" data-page="deposit">＋ ADD CASH</button></section>
+    <section class="matka60-round-info"><div><small>▤ PERIOD</small><strong id="matka60-period">#${safeText(roundId || "Syncing")}</strong></div><div><small>◷ TIME LEFT</small><strong id="matka60-time-left">${safeText(timerLabel)}</strong></div></section>
+    <div class="matka60-progress" aria-hidden="true"><span></span></div>
+    <section class="matka60-motor" aria-label="Random motor preview"><div class="matka60-motor-frame"><div id="matka60-motor-numbers" class="matka60-motor-digits is-spinning">${motorPreview.split("").map(digit => `<span>${digit}</span>`).join("")}</div></div><p id="matka60-round-status">${safeText(state.matka60ResultsError || (latestResult ? `Last official result · round #${latestResult.period}: ${latestResult.result}` : "Random motor preview · waiting for the manually published result"))}</p></section>
+    ${state.matka60HelpVisible ? `<aside class="matka60-help-panel"><strong>How to play</strong><span>Choose Ank or Panna, select your number, set points per number and place your bet before the round timer ends. Results are read from the manually published, locked Firebase round.</span></aside>` : ""}
+    ${unavailableMessage ? `<div class="matka60-warning" role="status">${safeText(unavailableMessage)}</div>` : ""}
+    <form id="matka60-bet-form" class="matka60-bet-card">
+      <h2>⚡ SELECT BET TYPE</h2>
+      <div class="matka60-type-toggle"><button type="button" class="${state.matka60BetType === "ank" ? "active" : ""}" data-matka60-type="ank">▦ ANK (SINGLE)</button><button type="button" class="${state.matka60BetType === "panna" ? "active" : ""}" data-matka60-type="panna">⠿ PANNA</button></div>
+      ${state.matka60BetType === "panna" ? `<p class="matka60-selection-label">SELECT DIGIT TO VIEW PANNAS:</p><div class="matka60-digit-strip">${Array.from({ length: 10 }, (_, digit) => `<button type="button" class="${state.matka60Digit === String(digit) ? "selected" : ""}" data-matka60-digit="${digit}">${digit}</button>`).join("")}</div>` : ""}
+      ${selectionButtons}
+      <div class="matka60-quick-adds">${quickAdds}</div>
+      <div class="matka60-place-row"><label class="matka60-amount"><span>₹</span><input id="matka60-amount" type="number" min="1" step="1" inputmode="numeric" value="${safeText(amount)}" aria-label="Points per number"></label><button type="submit" ${!selections.length || !state.matka60ClockSynced || unavailableMessage ? "disabled" : ""}>PLACE BET ✓</button></div>
+    </form>
+    <section class="matka60-session-bets"><h2>SESSION BETS (${currentBets.length})</h2>${currentBets.length
+      ? currentBets.map(bid => `<div><span>${safeText(bid.selection)} <small>${safeText(bid.gameType.replace("Matka 60 ", ""))}</small></span><strong>${money(bid.amount)}</strong></div>`).join("")
+      : `<p>No active bets placed yet for this round.</p>`}</section>
+    <section class="matka60-history-card"><div class="matka60-history-tabs"><button type="button" class="${state.matka60HistoryTab === "game" ? "active" : ""}" data-matka60-history="game">◷ GAME HISTORY</button><button type="button" class="${state.matka60HistoryTab === "bets" ? "active" : ""}" data-matka60-history="bets">▤ MY BET HISTORY</button></div>${renderMatka60History()}</section>
+  </section>`;
+}
+
 function toRecords(data) {
   data = decodeFirebaseValue(data);
   if (data === null || data === undefined) return [];
@@ -1479,9 +1929,11 @@ function normalizeMarkets(bucket) {
 }
 
 function setPage(page, recordHistory = true) {
+  const previousPage = state.page;
   state.supportDialogVisible = false;
   if (recordHistory && state.user && state.page !== page) pageHistory.push(state.page);
   state.page = page;
+  if (page === "matka60") startMatka60Feed();
   if (window.ReactNativeWebView) {
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: "screen-capture",
@@ -1499,11 +1951,11 @@ function setPage(page, recordHistory = true) {
   query("#sidebar").classList.remove("open");
   query("#drawer-scrim").classList.remove("visible");
   queryAll(".nav-link").forEach(link => link.classList.toggle("active",
-    link.dataset.page === page || (link.dataset.page === "markets" && ["game-select", "betting"].includes(page))));
+    link.dataset.page === page || (link.dataset.page === "markets" && ["game-select", "betting", "matka60"].includes(page))));
   queryAll(".mobile-bottom-nav [data-page]").forEach(link => link.classList.toggle("active",
-    link.dataset.page === page || (link.dataset.page === "markets" && ["game-select", "betting"].includes(page))));
+    link.dataset.page === page || (link.dataset.page === "markets" && ["game-select", "betting", "matka60"].includes(page))));
   const labels = {
-    home: "Home", markets: "Markets", betting: "Place bid", charts: "Result chart", webviewer: state.webViewerTitle || "Results", bids: "Bids history",
+    home: "Home", markets: "Markets", matka60: "Matka 60", betting: "Place bid", charts: "Result chart", webviewer: state.webViewerTitle || "Results", bids: "Bids history",
     "expert-guessing": "Free expert guessing", "guess-scratch": "Scratch to reveal",
     support: "Support",
     "game-select": "Choose game",
@@ -1576,6 +2028,7 @@ async function renderPage() {
     home: renderHome,
     support: () => "",
     markets: renderMarkets,
+    matka60: renderMatka60,
     "game-select": renderGameSelect,
     betting: renderBetting,
     charts: renderCharts,
@@ -2077,7 +2530,13 @@ function renderAiaBidsHistory() {
     ${[...markets.entries()].map(([market, bids]) => `<section class="aia-history-market">
       <h2>${safeText(market)}</h2>
       <div class="aia-history-columns"><span>Time</span><span>Type</span><span>Number</span><span>Points</span></div>
-      ${bids.slice().sort((a,b) => String(b.id).localeCompare(String(a.id))).map(bid => `<div class="aia-history-row"><span>${safeText(bidTime(bid))}</span><span>${safeText(bid.session || bid.payload?.[1] || "Open")}</span><span>${safeText(bid.selection || bid.payload?.[2] || "")}</span><span>${safeText(bid.amount ?? bid.payload?.[3] ?? "")}</span></div>`).join("")}
+      ${bids.slice().sort((a,b) => String(b.id).localeCompare(String(a.id))).map(bid => {
+        const settlement = matka60BidSettlementFor(bid);
+        const outcome = settlement
+          ? `${settlement.outcome}${settlement.outcome === "Won" ? ` · ${money(settlement.payout)}` : ""}`
+          : "";
+        return `<div class="aia-history-row"><span>${safeText(bidTime(bid))}</span><span>${safeText(bid.session || bid.payload?.[1] || "Open")}</span><span>${safeText(bid.selection || bid.payload?.[2] || "")}${outcome ? `<small> · ${safeText(outcome)}</small>` : ""}</span><span>${safeText(bid.amount ?? bid.payload?.[3] ?? "")}</span></div>`;
+      }).join("")}
     </section>`).join("")}`).join("")}</section>`;
 }
 
@@ -2384,6 +2843,107 @@ async function submitBid(event) {
     await renderPage();
   } catch (error) {
     notify(error.message || "Unable to submit the bid.", "error");
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function submitMatka60Bid(event) {
+  event.preventDefault();
+  if (state.accountBlocked) {
+    notify("This account is blocked from placing games. Contact support for help.", "error");
+    return;
+  }
+  if (state.maintenance) {
+    notify("Bidding is unavailable during maintenance.", "error");
+    return;
+  }
+  if (!state.matka60ClockSynced || state.matka60ResultsError) {
+    notify("The shared game feed is unavailable. Betting is paused.", "error");
+    return;
+  }
+  const serverNow = matka60ServerNow();
+  const periodId = serverNow === null ? "" : matka60PeriodId(serverNow);
+  const secondsLeft = serverNow === null ? 0 : Math.ceil((60000 - (serverNow % 60000)) / 1000);
+  if (!periodId || secondsLeft <= 0) {
+    notify("This round has ended. Wait for the next round to place a bet.", "error");
+    return;
+  }
+  const selections = state.matka60BetType === "ank"
+    ? [state.matka60Digit]
+    : [...state.matka60SelectedPannas];
+  const amount = Number(query("#matka60-amount")?.value ?? state.matka60Amount);
+  state.matka60Amount = amount;
+  if (!selections.length || !Number.isInteger(amount) || amount <= 0
+    || (state.minimumEntry > 0 && amount < state.minimumEntry)
+    || (state.maximumEntry > 0 && amount > state.maximumEntry)) {
+    notify("Choose valid number(s) and points within the current per-number limits.", "error");
+    return;
+  }
+  const total = amount * selections.length;
+  if (total > state.balance) {
+    notify("There are not enough points in your balance for these numbers.", "error");
+    return;
+  }
+  const button = event.target.querySelector('button[type="submit"]');
+  setBusy(button, true, "Submitting bet…");
+  try {
+    const balancePath = state.balancePath
+      || `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/COINS`;
+    if (!state.user?.phone || !balancePath.trim()) {
+      throw new Error("Your account balance is still loading. Please try again.");
+    }
+    const current = await dbGet(balancePath);
+    const currentBalance = Number(decodeFirebaseValue(current) || 0);
+    if (total > currentBalance) throw new Error("There are not enough points in your balance.");
+    const latestServerNow = matka60ServerNow();
+    if (latestServerNow === null || matka60PeriodId(latestServerNow) !== periodId
+      || Math.ceil((60000 - (latestServerNow % 60000)) / 1000) <= 0) {
+      throw new Error("This round has ended. Wait for the next round to place a bet.");
+    }
+    const now = new Date(latestServerNow);
+    const istNow = new Date(latestServerNow + 330 * 60 * 1000);
+    const date = `${String(istNow.getUTCDate()).padStart(2, "0")}-${String(istNow.getUTCMonth() + 1).padStart(2, "0")}-${istNow.getUTCFullYear()}`;
+    const time = `${String(istNow.getUTCHours() % 12 || 12).padStart(2, "0")}:${String(istNow.getUTCMinutes()).padStart(2, "0")}:${String(istNow.getUTCSeconds()).padStart(2, "0")}`;
+    const meridiem = istNow.getUTCHours() >= 12 ? "PM" : "AM";
+    const time12 = `${time} ${meridiem}`;
+    const createdAt = now.toISOString();
+    const nextBalance = currentBalance - total;
+    const updates = { [balancePath]: nextBalance };
+    const createdBids = selections.map((selection, index) => {
+      const gameType = `Matka 60 ${state.matka60BetType === "ank" ? "Ank" : "Panna"}`;
+      const tag = `${date}&${time}&${selection}&${Math.floor(100 + Math.random() * 900) + index}&Matka 60`;
+      const recordKey = dbKey(tag);
+      const bidValue = JSON.stringify([gameType, "Open", selection, String(amount), time12, periodId]);
+      const historyValue = `${date} ${time}:${amount.toFixed(1)}:"${selection}"`;
+      const historyKey = dbKey(`${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`);
+      updates[`${DATABASE_ROOTS.bidRecords}/${phonePath(state.user.phone)}/${date}/${recordKey}`] = bidValue;
+      updates[`${DATABASE_ROOTS.bidHistory}/${phonePath(state.user.phone)}/${date}/${historyKey}`] = historyValue;
+      return {
+        id: `${date}/${historyKey}`,
+        date,
+        tag: historyValue,
+        payload: JSON.parse(bidValue),
+        title: "Matka 60",
+        market: "Matka 60",
+        category: "Gali / Disawar",
+        gameType,
+        session: "Open",
+        selection,
+        amount,
+        status: "Submitted",
+        createdAt
+      };
+    });
+    await dbPatchAndVerify(updates);
+    state.balance = nextBalance;
+    state.bids.push(...createdBids);
+    state.pointsHistory.push(...createdBids.map(entry => ({ ...entry, type: "Bid" })));
+    state.matka60SelectedPannas = [];
+    notify(`${createdBids.length} Matka 60 bet${createdBids.length === 1 ? "" : "s"} submitted successfully.`);
+    await renderPage();
+  } catch (error) {
+    notify(error.message || "Unable to submit the Matka 60 bet.", "error");
   } finally {
     setBusy(button, false);
   }
@@ -2710,7 +3270,7 @@ async function shareApp() {
 }
 
 function handleClick(event) {
-  const target = event.target.closest("[data-page], [data-auth-mode], [data-select-game], [data-category], [data-action], [data-amount], [data-open-market], [data-market-result], [data-drawer-toggle], [data-session], [data-number], [data-remove-bet], [data-expert-period], [data-unlock-guess], .support-sheet-backdrop");
+  const target = event.target.closest("[data-page], [data-auth-mode], [data-select-game], [data-category], [data-action], [data-amount], [data-open-market], [data-market-result], [data-drawer-toggle], [data-session], [data-number], [data-remove-bet], [data-expert-period], [data-unlock-guess], [data-matka60-type], [data-matka60-digit], [data-matka60-number], [data-matka60-quick-add], [data-matka60-history], .support-sheet-backdrop");
   if (!target) return;
   if (target.classList.contains("support-sheet-backdrop") && event.target !== target) return;
   if (target.classList.contains("support-sheet-backdrop") && event.target === target) {
@@ -2738,8 +3298,58 @@ function handleClick(event) {
   }
   if (target.dataset.action === "open-feature-markets") {
     state.category = target.dataset.featureCategory;
+    if (state.category === "Gali / Disawar") {
+      state.matka60HistoryTab = "game";
+      setPage("matka60");
+      return;
+    }
     state.featureMarketPage = true;
     setPage("markets");
+    return;
+  }
+  if (target.dataset.action === "matka60-back") {
+    handleAppBack();
+    return;
+  }
+  if (target.dataset.action === "matka60-help") {
+    state.matka60HelpVisible = !state.matka60HelpVisible;
+    void renderPage();
+    return;
+  }
+  if (target.dataset.matka60Type) {
+    state.matka60BetType = target.dataset.matka60Type;
+    state.matka60SelectedPannas = [];
+    void renderPage();
+    return;
+  }
+  if (target.dataset.matka60Digit !== undefined) {
+    state.matka60Digit = target.dataset.matka60Digit;
+    state.matka60SelectedPannas = [];
+    void renderPage();
+    return;
+  }
+  if (target.dataset.matka60Number !== undefined) {
+    const number = target.dataset.matka60Number;
+    if (state.matka60BetType === "ank") {
+      state.matka60Digit = number;
+    } else if (state.matka60SelectedPannas.includes(number)) {
+      state.matka60SelectedPannas = state.matka60SelectedPannas.filter(item => item !== number);
+    } else {
+      state.matka60SelectedPannas = [...state.matka60SelectedPannas, number];
+    }
+    void renderPage();
+    return;
+  }
+  if (target.dataset.matka60QuickAdd !== undefined) {
+    const amount = Number(query("#matka60-amount")?.value || state.matka60Amount);
+    state.matka60Amount = (Number.isFinite(amount) ? amount : 0) + Number(target.dataset.matka60QuickAdd);
+    const amountInput = query("#matka60-amount");
+    if (amountInput) amountInput.value = String(state.matka60Amount);
+    return;
+  }
+  if (target.dataset.matka60History) {
+    state.matka60HistoryTab = target.dataset.matka60History;
+    void renderPage();
     return;
   }
   if (target.dataset.action === "open-expert-guessing") {
@@ -3053,6 +3663,7 @@ function handleClick(event) {
 function handleSubmit(event) {
   if (event.target.id === "auth-form") submitAuth(event);
   if (event.target.id === "bid-form") submitBid(event);
+  if (event.target.id === "matka60-bet-form") submitMatka60Bid(event);
   if (event.target.id === "deposit-form") {
     if (state.paymentApiUrl) void startPayment(event);
     else void submitRequest(event, "deposit");
@@ -3082,10 +3693,16 @@ async function copyTextToClipboard(value) {
 document.addEventListener("click", handleClick);
 document.addEventListener("submit", handleSubmit);
 window.setInterval(updatePaymentRetryCountdown, 1000);
+window.setInterval(updateMatka60Clock, 250);
 document.addEventListener("change", event => {
   if (event.target.matches('#bid-form select[name="market"]')) {
     state.selectedMarket = event.target.value;
     renderPage();
+  }
+});
+document.addEventListener("input", event => {
+  if (event.target.id === "matka60-amount") {
+    state.matka60Amount = Number(event.target.value);
   }
 });
 query("#logout-button").addEventListener("click", logout);
