@@ -10,8 +10,8 @@ const firebaseConfig = {
 };
 const DEFAULT_WEBSITE_URL = "https://a2morningapp.vercel.app";
 const MATKA60_API_URL = "https://a2morning.mama567.bond/matka60-api.php";
-const MATKA60_SERVER_AUTHORIZED_BETS_READY = false;
-const MATKA60_SERVER_API_READY = false;
+const MATKA60_SERVER_AUTHORIZED_BETS_READY = true;
+const MATKA60_SERVER_API_READY = true;
 
 if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
