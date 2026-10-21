@@ -9,6 +9,9 @@ const firebaseConfig = {
   measurementId: "G-2HVR18MNEZ"
 };
 const DEFAULT_WEBSITE_URL = "https://a2morningapp.vercel.app";
+const MATKA60_API_URL = "https://a2morning.mama567.bond/matka60-api.php";
+const MATKA60_SERVER_AUTHORIZED_BETS_READY = false;
+const MATKA60_SERVER_API_READY = false;
 
 if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
@@ -164,12 +167,13 @@ const state = {
   matka60ResultsPeriodId: "",
   matka60ResultsError: "",
   matka60BidSettlements: {},
-  matka60SettlementInFlight: false,
   matka60RoundId: "",
   matka60BetType: "ank",
   matka60Digit: "0",
   matka60SelectedPannas: [],
   matka60Amount: 50,
+  matka60SessionToken: "",
+  matka60PendingRequest: null,
   matka60HistoryTab: "game",
   matka60HelpVisible: false
 };
@@ -205,6 +209,7 @@ function userHistoryRecords(data, bidRecords) {
   const decoded = decodeFirebaseObject(data);
   if (!decoded || typeof decoded !== "object") return [];
   const detailsByKey = new Map();
+  const uniqueBidKeyByHistory = new Map();
   const decodedBidRecords = decodeFirebaseObject(bidRecords);
   for (const [date, records] of Object.entries(decodedBidRecords || {})) {
     if (date === "x" || !records || typeof records !== "object") continue;
@@ -221,10 +226,14 @@ function userHistoryRecords(data, bidRecords) {
 
       const parts = tag.split("&");
       if (parts.length >= 4) {
-        detailsByKey.set(`${date}|${parts[1]}|${parts[2]}`, {
+        const historyKey = `${date}|${parts[1]}|${parts[2]}`;
+        detailsByKey.set(historyKey, {
           market: parts[parts.length - 1].split(" : ")[0],
-          payload
+          payload,
+          bidKey: tag
         });
+        if (uniqueBidKeyByHistory.has(historyKey)) uniqueBidKeyByHistory.set(historyKey, "");
+        else uniqueBidKeyByHistory.set(historyKey, tag);
       }
     }
   }
@@ -246,6 +255,7 @@ function userHistoryRecords(data, bidRecords) {
         payload,
         title: details?.market || "Bid",
         market: details?.market || "",
+        bidKey: uniqueBidKeyByHistory.get(`${date}|${parsed.time}|${parsed.selection}`) || "",
         gameType: Array.isArray(payload) ? payload[0] : "",
         selection: parsed?.selection || "",
         createdAt: parseLegacyDate(`${date}&${parsed?.time || "00:00:00"}`, date),
@@ -255,6 +265,130 @@ function userHistoryRecords(data, bidRecords) {
     }
   }
   return records.sort((left, right) => right.id.localeCompare(left.id));
+}
+
+function matka60ProfileBids(profile) {
+  const periods = decodeFirebaseObject(profile?.matka60Bets) || {};
+  return Object.entries(periods).flatMap(([period, rawEntries]) => {
+    const entries = decodeFirebaseObject(rawEntries) || {};
+    return Object.values(entries).filter(entry => entry && typeof entry === "object")
+      .map(entry => {
+        const payload = decodeFirebaseValue(entry.payload);
+        const historyKey = String(entry.historyKey || "");
+        const date = String(entry.date || "");
+        const selection = String(entry.selection || "");
+        const amount = Number(entry.amount);
+        return {
+          id: `${date}/${historyKey}`,
+          date,
+          tag: `${date} ${(payload?.[4] || "")}:${amount}:"${selection}"`,
+          payload,
+          title: "Matka 60",
+          market: "Matka 60",
+          category: "Gali / Disawar",
+          gameType: String(entry.gameType || payload?.[0] || ""),
+          session: "Open",
+          selection,
+          amount,
+          status: "Submitted",
+          createdAt: String(entry.createdAt || ""),
+          bidKey: String(entry.bidKey || ""),
+          period: String(entry.period || period)
+        };
+      }).filter(entry => entry.id !== "/" && Number.isFinite(entry.amount));
+  });
+}
+
+async function matka60ApiRequest(action, payload, token = "") {
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(MATKA60_API_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...payload }),
+    cache: "no-store"
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result || result.ok !== true) {
+    const error = new Error(result?.message || `Matka 60 server request failed (HTTP ${response.status}).`);
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+async function authenticatePhoneAccount(mode, phone, password, name = "") {
+  if (!window.firebase?.auth) {
+    throw new Error("Secure sign-in is unavailable. Refresh the page and try again.");
+  }
+  const response = await matka60ApiRequest("auth", { mode, phone, password, name });
+  if (typeof response.firebaseCustomToken !== "string" || !response.firebaseCustomToken ||
+      typeof response.token !== "string" || !response.token) {
+    throw new Error("The server did not provide valid Firebase sign-in credentials.");
+  }
+  const auth = firebase.auth();
+  try {
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    const credential = await auth.signInWithCustomToken(response.firebaseCustomToken);
+    const idToken = await credential.user.getIdTokenResult();
+    if (credential.user.uid !== `a2_phone_${phone}` || idToken.claims.phone !== phone) {
+      await auth.signOut();
+      throw new Error("The Firebase account does not match this phone number.");
+    }
+    state.matka60SessionToken = response.token;
+    sessionStorage.setItem("a2MorningMatka60Session", JSON.stringify({
+      phone,
+      token: response.token
+    }));
+    return response;
+  } catch (error) {
+    if (typeof response.token === "string") revokeMatka60Session(response.token);
+    state.matka60SessionToken = "";
+    sessionStorage.removeItem("a2MorningMatka60Session");
+    throw error;
+  }
+}
+
+async function restoredFirebasePhone(phone) {
+  if (!window.firebase?.auth) throw new Error("Firebase Authentication is unavailable.");
+  const auth = firebase.auth();
+  const user = auth.currentUser || await new Promise((resolve, reject) => {
+    let unsubscribe = () => {};
+    unsubscribe = auth.onAuthStateChanged(
+      currentUser => {
+        unsubscribe();
+        resolve(currentUser);
+      },
+      error => {
+        unsubscribe();
+        reject(error);
+      }
+    );
+  });
+  if (!user) return false;
+  const idToken = await user.getIdTokenResult();
+  if (user.uid === `a2_phone_${phone}` && idToken.claims.phone === phone) return true;
+  await auth.signOut();
+  return false;
+}
+
+function restoreMatka60Session(phone) {
+  try {
+    const session = JSON.parse(sessionStorage.getItem("a2MorningMatka60Session") || "null");
+    state.matka60SessionToken = session?.phone === phone && typeof session.token === "string"
+      ? session.token : "";
+    if (!state.matka60SessionToken) sessionStorage.removeItem("a2MorningMatka60Session");
+  } catch (error) {
+    state.matka60SessionToken = "";
+    sessionStorage.removeItem("a2MorningMatka60Session");
+    console.error("Matka 60 session could not be restored:", error);
+  }
+}
+
+function revokeMatka60Session(token) {
+  if (!token) return;
+  void matka60ApiRequest("logout", {}, token)
+    .catch(error => console.error("Matka 60 session revocation failed:", error));
 }
 
 function parseLegacyHistoryTag(tag) {
@@ -906,56 +1040,21 @@ async function submitAuth(event) {
   }
   setBusy(button, true, state.authMode === "signup" ? "Creating account…" : "Signing in…");
   try {
-    if (state.authMode === "signup") {
-      await loadAdminSettings();
-      if (state.maintenance) throw new Error("New accounts and bidding are unavailable during maintenance.");
-      if (!state.newRegistrations) throw new Error("New player registrations are currently closed.");
-    }
-    const recordPath = `${DATABASE_ROOTS.users}/${phone}`;
-    const record = decodeFirebaseObject(await dbGet(recordPath));
-    const blocked = isBlockedValue(record?.blocked)
-      || isBlockedValue(await dbGet(`Blocked/${phone}`));
-    if (blocked) {
-      throw new Error("This account has been blocked. Contact support for help.");
-    }
-    if (state.authMode === "signup") {
-      if (record) throw new Error("An account with this phone number already exists.");
-      const bonus = await dbGet(`${DATABASE_ROOTS.settings}/Sign Up Bonus`);
-      state.signUpBonus = Number(decodeFirebaseValue(bonus) || 0);
-      const joinedAt = marketNow();
-      const joinedDate = `${String(joinedAt.getDate()).padStart(2, "0")}-${String(joinedAt.getMonth() + 1).padStart(2, "0")}-${joinedAt.getFullYear()}`;
-      await dbPatchAndVerify({
-        [recordPath]: {
-          name,
-          password,
-          COINS: String(state.signUpBonus),
-          B2: "0",
-          TD: "0",
-          TW: "0",
-          "Last Seen": new Date().toISOString(),
-          push: "",
-          blocked: "no"
-        },
-        [`${DATABASE_ROOTS.newUsers}/${joinedDate}/${phone}`]: [
-          name,
-          phone,
-          `${String((joinedAt.getHours() % 12) || 12).padStart(2, "0")}:${String(joinedAt.getMinutes()).padStart(2, "0")}:${String(joinedAt.getSeconds()).padStart(2, "0")} ${joinedAt.getHours() >= 12 ? "pm" : "am"}`
-        ]
-      });
-      state.user = { phone, name };
-      localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
-      await enterApp();
-      notify("Your account is ready.");
-      return;
-    }
-
-    if (!record || typeof record !== "object" || String(decodeFirebaseValue(record.password) ?? "") !== password) {
-      throw new Error("Phone number or password is incorrect.");
-    }
-    state.user = { phone, name: String(record.name || "Player") };
+    const result = await authenticatePhoneAccount(
+      state.authMode,
+      phone,
+      password,
+      state.authMode === "signup" ? name : ""
+    );
+    state.user = { phone, name: String(result.name || name || "Player") };
     localStorage.setItem("a2MorningUser", JSON.stringify(state.user));
     await enterApp();
-    notify(`Welcome back, ${state.user.name}.`);
+    if (state.authMode === "signup") {
+      notify("Your account is ready.");
+      if (Array.isArray(result.warnings)) result.warnings.forEach(message => notify(message, "error"));
+    } else {
+      notify(`Welcome back, ${state.user.name}.`);
+    }
   } catch (error) {
     notify(error.message || "Unable to access your account.", "error");
   } finally {
@@ -994,6 +1093,13 @@ function getSharedSessionFromUrl() {
 }
 
 function logout() {
+  revokeMatka60Session(state.matka60SessionToken);
+  if (window.firebase?.auth) {
+    void firebase.auth().signOut().catch(error => {
+      console.error("Firebase sign-out failed:", error);
+      notify("Could not fully sign out of Firebase. Please close this tab and retry.", "error");
+    });
+  }
   activePaymentChecks.forEach(check => {
     window.clearTimeout(check.timer);
     closePaymentViewer(check);
@@ -1015,8 +1121,10 @@ function logout() {
   state.accountTransactions = [];
   state.pointsHistory = [];
   state.matka60BidSettlements = {};
+  state.matka60SessionToken = "";
+  state.matka60PendingRequest = null;
+  sessionStorage.removeItem("a2MorningMatka60Session");
   stopMatka60Feed();
-  state.matka60SettlementInFlight = false;
   state.depositHistory = [];
   state.withdrawalHistory = [];
   localStorage.removeItem("a2MorningUser");
@@ -1126,14 +1234,18 @@ async function refreshUserData() {
     dbGet(`${DATABASE_ROOTS.users}/${phone}/transactions`)
   ]);
   if (!state.user || state.user.phone !== phoneNumber) return;
-  state.bids = userHistoryRecords(bids, bidRecords);
+  const legacyBids = userHistoryRecords(bids, bidRecords);
+  const legacyBidIds = new Set(legacyBids.map(bid => bid.id));
+  state.bids = [
+    ...legacyBids,
+    ...matka60ProfileBids(profile).filter(bid => !legacyBidIds.has(bid.id))
+  ];
   state.accountTransactions = normalizeAccountTransactions(transactions);
   state.matka60BidSettlements = profile?.matka60BidSettlements
     && typeof profile.matka60BidSettlements === "object"
     ? profile.matka60BidSettlements : {};
   state.userHistoryLoaded = true;
   updatePointsHistory();
-  void settleMatka60FinalizedRounds();
 }
 
 function normalizeAccountTransactions(value) {
@@ -1261,7 +1373,6 @@ async function loadGlobalData() {
     : [{ id: "Notice", title: "Notice", message: String(decodeFirebaseValue(notice)) }];
   state.rates = decodeFirebaseObject(rates);
   applyAdminSettings(settings);
-  if (state.rates !== null && state.rates !== undefined) void settleMatka60FinalizedRounds();
 }
 
 function stopRealtimeSubscriptions() {
@@ -1381,7 +1492,6 @@ function applyRealtimeValue(path, value) {
   }
   if (path === DATABASE_ROOTS.rates) {
     state.rates = decodeFirebaseObject(value);
-    void settleMatka60FinalizedRounds();
     return;
   }
   if (path === DATABASE_ROOTS.settings) {
@@ -1546,10 +1656,9 @@ function syncMatka60ResultsFeed() {
   matka60ResultsRef.on("value", snapshot => {
     state.matka60Results = snapshot.val() || {};
     state.matka60ResultsError = "";
-    void settleMatka60FinalizedRounds();
     if (state.page === "matka60") void renderPage();
   }, error => {
-    state.matka60ResultsError = `Could not load official results: ${error.message || error}`;
+    state.matka60ResultsError = `Could not load official results: ${error.message || error}. Betting is paused.`;
     if (state.page === "matka60") void renderPage();
   });
 }
@@ -1580,174 +1689,13 @@ function matka60ValidResult(record) {
 }
 
 function matka60ResultIsFinalized(record) {
+  if (typeof record === "string") return Boolean(matka60ValidResult(record));
   return Boolean(record && typeof record === "object" && record.finalized === true);
-}
-
-function matka60RateFor(gameType) {
-  const labels = ["Single Digit", "Double Digit", "Single Pana", "Double Pana", "Triple Pana"];
-  const target = String(gameType || "").trim().toLowerCase();
-  const row = toRecords(state.rates).find(rate => {
-    const label = String(rate.name || rate.game || labels[Number(rate.id) - 1] || rate.id)
-      .trim()
-      .toLowerCase();
-    return label === target;
-  });
-  const value = Number(row?.rate ?? row?.value);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function matka60BetSettlement(bid, result) {
-  const payload = Array.isArray(bid.payload) ? bid.payload : [];
-  const gameType = String(payload[0] || bid.gameType || "");
-  const selection = String(payload[2] || bid.selection || "").trim();
-  const amount = Number(payload[3] ?? bid.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  let rateType = "";
-  let won = false;
-  if (/^Matka 60 Ank$/i.test(gameType)) {
-    rateType = "Single Digit";
-    const ank = String([...result].reduce((sum, digit) => sum + Number(digit), 0) % 10);
-    won = selection === ank;
-  } else if (/^Matka 60 Panna$/i.test(gameType) && /^\d{3}$/.test(selection)) {
-    const uniqueDigits = new Set(selection).size;
-    rateType = uniqueDigits === 3 ? "Single Pana"
-      : uniqueDigits === 2 ? "Double Pana" : "Triple Pana";
-    won = selection === result;
-  } else {
-    return null;
-  }
-  const rate = won ? matka60RateFor(rateType) : 0;
-  if (won && rate === null) {
-    throw new Error(`The ${rateType} rate is missing or invalid. This Matka 60 round was not settled.`);
-  }
-  return {
-    gameType,
-    selection,
-    amount,
-    outcome: won ? "Won" : "Lost",
-    rate: won ? rate : 0,
-    payout: won ? Math.round((amount / 10) * rate * 100) / 100 : 0
-  };
 }
 
 function matka60BidSettlementFor(bid) {
   const periodId = String(bid.payload?.[5] || "");
   return state.matka60BidSettlements?.[periodId]?.[dbKey(bid.id)] || null;
-}
-
-async function settleMatka60FinalizedRounds() {
-  if (!state.user || !state.userHistoryLoaded || !matka60FirebaseApp
-    || !state.matka60ClockSynced || !state.rates || state.matka60SettlementInFlight) return;
-  const serverNow = matka60ServerNow();
-  if (serverNow === null) return;
-  const lastCompletedPeriod = matka60PreviousPeriodId(serverNow);
-  const rounds = Object.entries(state.matka60Results || {})
-    .filter(([period, record]) => period <= lastCompletedPeriod && matka60ResultIsFinalized(record))
-    .sort(([left], [right]) => left.localeCompare(right));
-  if (!rounds.length) return;
-  const phone = state.user.phone;
-  state.matka60SettlementInFlight = true;
-  try {
-    for (const [periodId, record] of rounds) {
-      if (!state.user || state.user.phone !== phone) return;
-      const result = matka60ValidResult(record);
-      if (!result) continue;
-      const roundBids = state.bids.filter(bid =>
-        String(bid.gameType || "").startsWith("Matka 60")
-          && String(bid.payload?.[5] || "") === periodId
-      );
-      if (!roundBids.length) continue;
-      const settlements = roundBids
-        .map(bid => ({ bid, settlement: matka60BetSettlement(bid, result) }))
-        .filter(item => item.settlement);
-      if (!settlements.length) continue;
-      const profileRef = firebase.database().ref(`${DATABASE_ROOTS.users}/${phonePath(phone)}`);
-      const transactionResult = await profileRef.transaction(profile => {
-        if (!profile || typeof profile !== "object" || Array.isArray(profile)) return;
-        const completedRounds = profile.matka60Settlements
-          && typeof profile.matka60Settlements === "object"
-          ? profile.matka60Settlements : {};
-        if (completedRounds[periodId]) return;
-        const paidBids = profile.matka60BidSettlements
-          && typeof profile.matka60BidSettlements === "object"
-          ? profile.matka60BidSettlements : {};
-        const previousPeriodSettlements = paidBids[periodId];
-        const periodSettlements = previousPeriodSettlements
-          && typeof previousPeriodSettlements === "object"
-          ? { ...previousPeriodSettlements } : {};
-        const transactions = profile.transactions
-          && typeof profile.transactions === "object"
-          ? { ...profile.transactions } : {};
-        const balance = Number(profile.COINS);
-        if (!Number.isFinite(balance) || balance < 0) return;
-        let nextBalance = balance;
-        const processedAt = new Date().toISOString();
-        for (const { bid, settlement } of settlements) {
-          const settlementKey = dbKey(bid.id);
-          if (periodSettlements[settlementKey]) continue;
-          const transactionId = `M60-${periodId}-${settlementKey}`;
-          periodSettlements[settlementKey] = {
-            result,
-            outcome: settlement.outcome,
-            payout: settlement.payout,
-            rate: settlement.rate,
-            processedAt
-          };
-          if (settlement.outcome !== "Won") continue;
-          nextBalance += settlement.payout;
-          transactions[transactionId] = {
-            id: transactionId,
-            type: "Winning",
-            amount: settlement.payout,
-            title: "Matka 60 winning",
-            market: "Matka 60",
-            gameType: settlement.gameType,
-            selection: settlement.selection,
-            period: periodId,
-            result,
-            rate: settlement.rate,
-            date: processedAt,
-            createdAt: processedAt,
-            status: "Credited",
-            note: `Matka 60 · ${settlement.gameType.replace("Matka 60 ", "")} ${settlement.selection} · round ${periodId} · result ${result}`
-          };
-        }
-        profile.COINS = nextBalance;
-        profile.transactions = transactions;
-        profile.matka60BidSettlements = {
-          ...paidBids,
-          [periodId]: periodSettlements
-        };
-        profile.matka60Settlements = {
-          ...completedRounds,
-          [periodId]: { result, processedAt }
-        };
-        return profile;
-      }, undefined, false);
-      if (!state.user || state.user.phone !== phone) return;
-      const profile = transactionResult.snapshot.val() || {};
-      if (!transactionResult.committed && !profile.matka60Settlements?.[periodId]) {
-        throw new Error(`Could not record Matka 60 settlement for round ${periodId}. Check account write permissions and balance data.`);
-      }
-      state.balance = Number(profile.COINS) || 0;
-      state.matka60BidSettlements = profile.matka60BidSettlements || {};
-      state.accountTransactions = normalizeAccountTransactions(profile.transactions);
-      updatePointsHistory();
-      if (transactionResult.committed) {
-        const paid = settlements.reduce((sum, item) => sum + item.settlement.payout, 0);
-        if (paid > 0) {
-          notify(`Matka 60 win credited: ${money(paid)} for round ${periodId}.`);
-        }
-        if (state.page === "points" || state.page === "bids" || state.page === "matka60") {
-          await renderPage();
-        }
-      }
-    }
-  } catch (error) {
-    notify(error.message || "Could not settle Matka 60 results.", "error");
-  } finally {
-    state.matka60SettlementInFlight = false;
-  }
 }
 
 function matka60LatestResult() {
@@ -1843,8 +1791,10 @@ function renderMatka60() {
   const unavailableMessage = state.maintenance
     ? "Game play is temporarily unavailable during maintenance."
     : state.accountBlocked ? "This account is blocked from placing games."
-      : state.matka60ResultsError ? "The shared game feed is unavailable. Betting is paused."
-        : !state.matka60ClockSynced ? "Syncing the shared game clock. Betting is paused." : "";
+      : !MATKA60_SERVER_AUTHORIZED_BETS_READY || !MATKA60_SERVER_API_READY
+        ? "Matka 60 is paused until server-authorized bets and database write rules are configured."
+        : state.matka60ResultsError ? "The shared game feed is unavailable. Betting is paused."
+          : !state.matka60ClockSynced ? "Syncing the shared game clock. Betting is paused." : "";
   const selectionButtons = state.matka60BetType === "ank"
     ? `<div class="matka60-number-grid">${Array.from({ length: 10 }, (_, digit) => `<button type="button" class="${state.matka60Digit === String(digit) ? "selected" : ""}" data-matka60-number="${digit}">${digit}</button>`).join("")}</div>`
     : `<p class="matka60-selection-label">SELECT PANNA(S) FOR (${safeText(state.matka60Digit)}) · Selected: ${selectedPannas.length}</p><div class="matka60-panna-grid">${matka60PannasForDigit(state.matka60Digit).map(number => `<button type="button" class="${selectedPannas.includes(number) ? "selected" : ""}" data-matka60-number="${number}">${number}</button>`).join("")}</div>`;
@@ -1858,7 +1808,7 @@ function renderMatka60() {
     <section class="matka60-round-info"><div><small>▤ PERIOD</small><strong id="matka60-period">#${safeText(roundId || "Syncing")}</strong></div><div><small>◷ TIME LEFT</small><strong id="matka60-time-left">${safeText(timerLabel)}</strong></div></section>
     <div class="matka60-progress" aria-hidden="true"><span></span></div>
     <section class="matka60-motor" aria-label="Random motor preview"><div class="matka60-motor-frame"><div id="matka60-motor-numbers" class="matka60-motor-digits is-spinning">${motorPreview.split("").map(digit => `<span>${digit}</span>`).join("")}</div></div><p id="matka60-round-status">${safeText(state.matka60ResultsError || (latestResult ? `Last official result · round #${latestResult.period}: ${latestResult.result}` : "Random motor preview · waiting for the manually published result"))}</p></section>
-    ${state.matka60HelpVisible ? `<aside class="matka60-help-panel"><strong>How to play</strong><span>Choose Ank or Panna, select your number, set points per number and place your bet before the round timer ends. Results are read from the manually published, locked Firebase round.</span></aside>` : ""}
+    ${state.matka60HelpVisible ? `<aside class="matka60-help-panel"><strong>How to play</strong><span>Choose Ank or Panna, select your number, set points per number and place your bet before the round timer ends. Results come from the locked Firebase feed; the Hostinger server settles finalized rounds and credits any winnings to your wallet.</span></aside>` : ""}
     ${unavailableMessage ? `<div class="matka60-warning" role="status">${safeText(unavailableMessage)}</div>` : ""}
     <form id="matka60-bet-form" class="matka60-bet-card">
       <h2>⚡ SELECT BET TYPE</h2>
@@ -2850,6 +2800,14 @@ async function submitBid(event) {
 
 async function submitMatka60Bid(event) {
   event.preventDefault();
+  if (!MATKA60_SERVER_AUTHORIZED_BETS_READY || !MATKA60_SERVER_API_READY) {
+    notify("Matka 60 is paused until server-authorized bets and database write rules are configured.", "error");
+    return;
+  }
+  if (!state.matka60SessionToken) {
+    notify("Please sign in again to enable server-authorized Matka 60 betting.", "error");
+    return;
+  }
   if (state.accountBlocked) {
     notify("This account is blocked from placing games. Contact support for help.", "error");
     return;
@@ -2863,86 +2821,84 @@ async function submitMatka60Bid(event) {
     return;
   }
   const serverNow = matka60ServerNow();
-  const periodId = serverNow === null ? "" : matka60PeriodId(serverNow);
+  const currentPeriodId = serverNow === null ? "" : matka60PeriodId(serverNow);
   const secondsLeft = serverNow === null ? 0 : Math.ceil((60000 - (serverNow % 60000)) / 1000);
-  if (!periodId || secondsLeft <= 0) {
-    notify("This round has ended. Wait for the next round to place a bet.", "error");
-    return;
-  }
   const selections = state.matka60BetType === "ank"
     ? [state.matka60Digit]
     : [...state.matka60SelectedPannas];
   const amount = Number(query("#matka60-amount")?.value ?? state.matka60Amount);
   state.matka60Amount = amount;
+  const gameType = `Matka 60 ${state.matka60BetType === "ank" ? "Ank" : "Panna"}`;
+  const requestFingerprint = JSON.stringify({ gameType, selections, amount });
+  const pendingRequest = state.matka60PendingRequest;
+  if (pendingRequest && pendingRequest.fingerprint !== requestFingerprint) {
+    notify("A previous bet may still be processing. Retry the same selection before starting another bet.", "error");
+    return;
+  }
+  const replayingPendingRequest = Boolean(pendingRequest);
+  const periodId = replayingPendingRequest ? pendingRequest.periodId : currentPeriodId;
+  if (!periodId || (!replayingPendingRequest && secondsLeft <= 0)) {
+    notify("This round has ended. Wait for the next round to place a bet.", "error");
+    return;
+  }
   if (!selections.length || !Number.isInteger(amount) || amount <= 0
-    || (state.minimumEntry > 0 && amount < state.minimumEntry)
-    || (state.maximumEntry > 0 && amount > state.maximumEntry)) {
+    || (!replayingPendingRequest && state.minimumEntry > 0 && amount < state.minimumEntry)
+    || (!replayingPendingRequest && state.maximumEntry > 0 && amount > state.maximumEntry)) {
     notify("Choose valid number(s) and points within the current per-number limits.", "error");
     return;
   }
   const total = amount * selections.length;
-  if (total > state.balance) {
+  if (!replayingPendingRequest && total > state.balance) {
     notify("There are not enough points in your balance for these numbers.", "error");
     return;
   }
   const button = event.target.querySelector('button[type="submit"]');
   setBusy(button, true, "Submitting bet…");
   try {
-    const balancePath = state.balancePath
-      || `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/COINS`;
-    if (!state.user?.phone || !balancePath.trim()) {
-      throw new Error("Your account balance is still loading. Please try again.");
+    if (!replayingPendingRequest) {
+      const latestServerNow = matka60ServerNow();
+      if (latestServerNow === null || matka60PeriodId(latestServerNow) !== periodId
+        || Math.ceil((60000 - (latestServerNow % 60000)) / 1000) <= 0) {
+        throw new Error("This round has ended. Wait for the next round to place a bet.");
+      }
     }
-    const current = await dbGet(balancePath);
-    const currentBalance = Number(decodeFirebaseValue(current) || 0);
-    if (total > currentBalance) throw new Error("There are not enough points in your balance.");
-    const latestServerNow = matka60ServerNow();
-    if (latestServerNow === null || matka60PeriodId(latestServerNow) !== periodId
-      || Math.ceil((60000 - (latestServerNow % 60000)) / 1000) <= 0) {
-      throw new Error("This round has ended. Wait for the next round to place a bet.");
-    }
-    const now = new Date(latestServerNow);
-    const istNow = new Date(latestServerNow + 330 * 60 * 1000);
-    const date = `${String(istNow.getUTCDate()).padStart(2, "0")}-${String(istNow.getUTCMonth() + 1).padStart(2, "0")}-${istNow.getUTCFullYear()}`;
-    const time = `${String(istNow.getUTCHours() % 12 || 12).padStart(2, "0")}:${String(istNow.getUTCMinutes()).padStart(2, "0")}:${String(istNow.getUTCSeconds()).padStart(2, "0")}`;
-    const meridiem = istNow.getUTCHours() >= 12 ? "PM" : "AM";
-    const time12 = `${time} ${meridiem}`;
-    const createdAt = now.toISOString();
-    const nextBalance = currentBalance - total;
-    const updates = { [balancePath]: nextBalance };
-    const createdBids = selections.map((selection, index) => {
-      const gameType = `Matka 60 ${state.matka60BetType === "ank" ? "Ank" : "Panna"}`;
-      const tag = `${date}&${time}&${selection}&${Math.floor(100 + Math.random() * 900) + index}&Matka 60`;
-      const recordKey = dbKey(tag);
-      const bidValue = JSON.stringify([gameType, "Open", selection, String(amount), time12, periodId]);
-      const historyValue = `${date} ${time}:${amount.toFixed(1)}:"${selection}"`;
-      const historyKey = dbKey(`${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`);
-      updates[`${DATABASE_ROOTS.bidRecords}/${phonePath(state.user.phone)}/${date}/${recordKey}`] = bidValue;
-      updates[`${DATABASE_ROOTS.bidHistory}/${phonePath(state.user.phone)}/${date}/${historyKey}`] = historyValue;
-      return {
-        id: `${date}/${historyKey}`,
-        date,
-        tag: historyValue,
-        payload: JSON.parse(bidValue),
-        title: "Matka 60",
-        market: "Matka 60",
-        category: "Gali / Disawar",
-        gameType,
-        session: "Open",
-        selection,
-        amount,
-        status: "Submitted",
-        createdAt
+    if (!state.matka60PendingRequest) {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+      state.matka60PendingRequest = {
+        fingerprint: requestFingerprint,
+        periodId,
+        requestId: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
       };
-    });
-    await dbPatchAndVerify(updates);
-    state.balance = nextBalance;
-    state.bids.push(...createdBids);
-    state.pointsHistory.push(...createdBids.map(entry => ({ ...entry, type: "Bid" })));
+    }
+    const response = await matka60ApiRequest("placeBet", {
+      requestId: state.matka60PendingRequest.requestId,
+      periodId,
+      gameType,
+      digit: state.matka60Digit,
+      selections,
+      amount
+    }, state.matka60SessionToken);
+    const createdBids = Array.isArray(response.bets) ? response.bets : [];
+    if (!createdBids.length || !Number.isFinite(Number(response.balance))) {
+      throw new Error("The server response did not confirm the saved Matka 60 bet.");
+    }
+    state.balance = Number(response.balance);
+    const existingBidIds = new Set(state.bids.map(bid => bid.id));
+    state.bids.push(...createdBids.filter(bid => !existingBidIds.has(bid.id)));
+    if (response.transaction?.id &&
+        !state.accountTransactions.some(transaction => transaction.id === response.transaction.id)) {
+      state.accountTransactions.push(response.transaction);
+    }
+    state.matka60PendingRequest = null;
+    updatePointsHistory();
     state.matka60SelectedPannas = [];
     notify(`${createdBids.length} Matka 60 bet${createdBids.length === 1 ? "" : "s"} submitted successfully.`);
     await renderPage();
   } catch (error) {
+    if (error.status >= 400 && error.status < 500) state.matka60PendingRequest = null;
     notify(error.message || "Unable to submit the Matka 60 bet.", "error");
   } finally {
     setBusy(button, false);
@@ -3754,11 +3710,22 @@ async function startApplication() {
   } else if (!restoreSession()) {
     showAuth("signup");
     notifyNativeAppReady();
-    void loadAdminSettings().catch(error => {
-      notify(error.message || "Unable to load support settings.", "error");
-    });
     return;
   }
+  try {
+    if (!await restoredFirebasePhone(state.user.phone)) {
+      localStorage.removeItem("a2MorningUser");
+      state.user = null;
+      showAuth("login");
+      notifyNativeAppReady();
+      return;
+    }
+  } catch (error) {
+    showStartupError(error);
+    notifyNativeAppReady();
+    return;
+  }
+  restoreMatka60Session(state.user.phone);
 
   void loadAdminSettings().catch(error => {
     notify(error.message || "Unable to load support settings.", "error");

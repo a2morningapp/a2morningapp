@@ -767,85 +767,6 @@ td strong { color: #35423a; font-weight: 700; }
   .withdrawal-closed-dialog .mama-dialog-body p { font-size: 14px; }
 }
 
-.matka60-page { width: min(100%, 680px); margin: 0 auto; padding: 10px 12px max(24px,env(safe-area-inset-bottom)); color: #17191b; background: linear-gradient(160deg,#fff5fc,#f8e7f4 58%,#fff7fb); }
-.matka60-header { position: sticky; z-index: 1; top: 0; display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 9px; margin: -10px -12px 13px; padding: max(9px,env(safe-area-inset-top)) 12px 10px; border-bottom: 1px solid #f2d8e8; background: rgba(255,247,252,.97); }
-.matka60-header h1 { margin: 0; font-size: clamp(19px,5vw,25px); font-weight: 900; }
-.matka60-header button { min-height: 42px; border: 1px solid #414047; border-radius: 11px; color: #17191b; background: #fff; font-weight: 800; }
-.matka60-back { width: 44px; font-size: 30px !important; line-height: 1; }
-.matka60-help { padding: 0 10px; font-size: 11px; }
-.matka60-balance { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 84px; margin-bottom: 13px; padding: 14px 17px; border-radius: 15px; color: #fff; background: linear-gradient(120deg,#039458,#07b267); box-shadow: 0 4px 10px #036d4733; }
-.matka60-balance div { display: grid; gap: 3px; }
-.matka60-balance small { font-size: 12px; font-weight: 800; letter-spacing: .1em; }
-.matka60-balance strong { font-size: 25px; }
-.matka60-balance button { min-height: 46px; padding: 0 13px; border: 0; border-radius: 11px; color: #fff; background: #dba52a; font-size: 14px; font-weight: 900; }
-.matka60-round-info { display: grid; grid-template-columns: 1.2fr .9fr; gap: 10px; }
-.matka60-round-info>div { display: grid; align-content: center; justify-items: center; gap: 6px; min-width: 0; min-height: 84px; padding: 9px 6px; border: 1px solid #76515f; border-radius: 13px; text-align: center; }
-.matka60-round-info small { font-size: 12px; font-weight: 900; letter-spacing: .06em; }
-.matka60-round-info strong { overflow-wrap: anywhere; font-size: clamp(16px,4.6vw,24px); font-weight: 900; }
-.matka60-progress { height: 8px; overflow: hidden; margin: 12px 4px 15px; border-radius: 9px; background: #242322; }
-.matka60-progress span { display: block; width: 35%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f5bd30,#18a961); animation: matka60-progress 3s ease-in-out infinite alternate; }
-@keyframes matka60-progress { from { transform: translateX(-20%); } to { transform: translateX(220%); } }
-.matka60-motor { display: grid; justify-items: center; gap: 7px; margin: 0 0 16px; }
-.matka60-motor-frame { display: grid; width: min(100%,500px); min-height: 125px; place-items: center; padding: 13px 20px; border: 8px ridge #b98d28; border-radius: 31px; color: #080808; background: linear-gradient(180deg,#dce5da,#fff 46%,#b4c1b6); box-shadow: inset 0 0 0 5px #078a4b,0 6px 15px #44270c40; }
-.matka60-motor-digits { display: grid; grid-template-columns: repeat(3,minmax(55px,1fr)); align-items: center; gap: 14px; width: min(100%,350px); text-align: center; }
-.matka60-motor-digits span { display: block; font: 900 clamp(54px,15vw,82px)/1 "Manrope",sans-serif; }
-.matka60-motor-digits.is-spinning span { animation: matka60-roll .28s ease-in-out infinite alternate; }
-.matka60-motor-digits.is-spinning span:nth-child(2) { animation-delay: .07s; }
-.matka60-motor-digits.is-spinning span:nth-child(3) { animation-delay: .14s; }
-@keyframes matka60-roll { from { transform: translateY(-3px) rotateX(7deg); filter: blur(.4px); } to { transform: translateY(3px) rotateX(-7deg); filter: blur(0); } }
-.matka60-motor p { margin: 0; color: #655465; font-size: 11px; font-weight: 700; text-align: center; }
-.matka60-help-panel,.matka60-warning { margin: 0 0 12px; padding: 12px; border: 1px solid #ebc4d7; border-radius: 13px; background: #fff; font-size: 12px; line-height: 1.55; }
-.matka60-help-panel { display: grid; gap: 4px; }
-.matka60-help-panel strong { font-size: 14px; }
-.matka60-warning { color: #8b300d; background: #fff3e7; }
-.matka60-bet-card,.matka60-session-bets,.matka60-history-card { margin: 0 0 14px; padding: 14px; border: 1px solid #dedde2; border-radius: 20px; background: #fff; box-shadow: 0 4px 10px #37294320; }
-.matka60-bet-card h2,.matka60-session-bets h2 { margin: 0 0 10px; color: #45434a; font-size: 15px; font-weight: 900; text-align: center; }
-.matka60-type-toggle,.matka60-history-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; border-radius: 12px; background: #edf0f2; }
-.matka60-type-toggle button,.matka60-history-tabs button { min-height: 45px; border: 0; border-radius: 9px; color: #6d7076; background: transparent; font-weight: 900; }
-.matka60-type-toggle button.active,.matka60-history-tabs button.active { color: #fff; background: #08a263; box-shadow: 0 2px 5px #007b4b40; }
-.matka60-selection-label { margin: 13px 0 8px; color: #515058; font-size: 12px; font-weight: 900; }
-.matka60-digit-strip { display: grid; grid-template-columns: repeat(10,minmax(30px,1fr)); gap: 5px; overflow-x: auto; padding: 3px 0 8px; }
-.matka60-digit-strip button,.matka60-number-grid button,.matka60-panna-grid button { min-width: 0; min-height: 47px; border: 1px solid #d9dce0; border-radius: 9px; color: #17191b; background: #f9fafb; font-size: 19px; font-weight: 800; box-shadow: 0 1px 2px #0000000b; }
-.matka60-digit-strip button { min-height: 40px; font-size: 16px; }
-.matka60-number-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px; margin: 12px 0 16px; }
-.matka60-number-grid button { min-height: 58px; font-size: 23px; }
-.matka60-panna-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; max-height: 260px; overflow-y: auto; margin: 8px 0 14px; padding: 5px; border: 1px solid #e1e1e3; border-radius: 12px; }
-.matka60-panna-grid button { min-height: 42px; font-size: 15px; }
-.matka60-number-grid button.selected,.matka60-digit-strip button.selected,.matka60-panna-grid button.selected { border-color: #07965d; color: #fff; background: #08a263; }
-.matka60-quick-adds { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 15px 0; }
-.matka60-quick-adds button { min-height: 42px; border: 1px solid #178849; border-radius: 9px; color: #148047; background: #fff; font-size: 13px; font-weight: 900; }
-.matka60-place-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); gap: 9px; }
-.matka60-amount { display: flex; overflow: hidden; min-height: 56px; border: 1px solid #d2d5d9; border-radius: 12px; background: #f6f8fa; }
-.matka60-amount span { display: grid; min-width: 39px; place-items: center; border-right: 1px solid #d2d5d9; font-size: 18px; font-weight: 800; }
-.matka60-amount input { width: 100%; min-width: 0; padding: 0 9px; border: 0; outline: 0; background: transparent; font-size: 22px; font-weight: 900; }
-.matka60-place-row>button { min-height: 56px; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(115deg,#0ac57c,#07975c); font-size: clamp(14px,4vw,19px); font-weight: 900; box-shadow: 0 3px 6px #05844e30; }
-.matka60-place-row>button:disabled { color: #747984; background: #c9ccd3; box-shadow: none; }
-.matka60-session-bets h2 { text-align: left; }
-.matka60-session-bets>p,.matka60-empty { margin: 12px 0 4px; color: #a2a4a9; font-size: 12px; }
-.matka60-session-bets>div,.matka60-history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 2px; border-top: 1px solid #ececef; }
-.matka60-session-bets>div span { display: flex; align-items: center; gap: 7px; font-weight: 800; }
-.matka60-session-bets small { color: #82858b; font-size: 10px; }
-.matka60-history-card { padding: 10px; }
-.matka60-history-tabs { margin-bottom: 8px; }
-.matka60-history-tabs button { min-height: 40px; font-size: 12px; }
-.matka60-history-head { display: grid; grid-template-columns: 1fr 55px 110px; gap: 5px; padding: 8px 3px; color: #737782; font-size: 11px; font-weight: 900; }
-.matka60-history-head span:nth-child(2) { text-align: center; }
-.matka60-history-head span:last-child { text-align: right; }
-.matka60-history-row>span:first-child { display: grid; gap: 3px; }
-.matka60-history-row strong { font-size: 13px; }
-.matka60-history-row small { color: #777a81; font-size: 11px; }
-.matka60-history-row>span:nth-child(2) { width: 55px; text-align: center; font-size: 18px; }
-.matka60-result-digits { display: flex; gap: 4px; }
-.matka60-result-digits b { display: grid; width: 28px; height: 32px; place-items: center; border: 1px solid #d7d9de; border-radius: 5px; background: #f5f6f8; font-size: 17px; }
-.matka60-history-list>.matka60-history-row:not(.matka60-result-row) small { display: inline; }
-
-@media (max-width: 760px) {
-  .matka60-page { width: 100%; padding-right: 12px; padding-left: 12px; }
-  .matka60-round-info>div { min-height: 78px; }
-  .matka60-motor-frame { min-height: 115px; }
-  .matka60-bet-card { padding: 12px; }
-}
-
 @media (max-width: 760px) {
   .market-card.aia-market-card {
     grid-template-columns: 52px minmax(0,1fr) 52px;
@@ -999,4 +920,83 @@ td strong { color: #35423a; font-weight: 700; }
   .insufficient-balance-actions { display: grid; gap: 8px; }
   .insufficient-balance-actions .button-primary { background: #810900; }
   .insufficient-balance-actions .button-secondary { min-height: 42px; border: 0; color: #6d2222; background: #f7eeee; }
+}
+
+.matka60-page { width: min(100%, 680px); margin: 0 auto; padding: 10px 12px max(24px,env(safe-area-inset-bottom)); color: #17191b; background: linear-gradient(160deg,#fff5fc,#f8e7f4 58%,#fff7fb); }
+.matka60-header { position: sticky; z-index: 1; top: 0; display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 9px; margin: -10px -12px 13px; padding: max(9px,env(safe-area-inset-top)) 12px 10px; border-bottom: 1px solid #f2d8e8; background: rgba(255,247,252,.97); }
+.matka60-header h1 { margin: 0; font-size: clamp(19px,5vw,25px); font-weight: 900; }
+.matka60-header button { min-height: 42px; border: 1px solid #414047; border-radius: 11px; color: #17191b; background: #fff; font-weight: 800; }
+.matka60-back { width: 44px; font-size: 30px !important; line-height: 1; }
+.matka60-help { padding: 0 10px; font-size: 11px; }
+.matka60-balance { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 84px; margin-bottom: 13px; padding: 14px 17px; border-radius: 15px; color: #fff; background: linear-gradient(120deg,#039458,#07b267); box-shadow: 0 4px 10px #036d4733; }
+.matka60-balance div { display: grid; gap: 3px; }
+.matka60-balance small { font-size: 12px; font-weight: 800; letter-spacing: .1em; }
+.matka60-balance strong { font-size: 25px; }
+.matka60-balance button { min-height: 46px; padding: 0 13px; border: 0; border-radius: 11px; color: #fff; background: #dba52a; font-size: 14px; font-weight: 900; }
+.matka60-round-info { display: grid; grid-template-columns: 1.2fr .9fr; gap: 10px; }
+.matka60-round-info>div { display: grid; align-content: center; justify-items: center; gap: 6px; min-width: 0; min-height: 84px; padding: 9px 6px; border: 1px solid #76515f; border-radius: 13px; text-align: center; }
+.matka60-round-info small { font-size: 12px; font-weight: 900; letter-spacing: .06em; }
+.matka60-round-info strong { overflow-wrap: anywhere; font-size: clamp(16px,4.6vw,24px); font-weight: 900; }
+.matka60-progress { height: 8px; overflow: hidden; margin: 12px 4px 15px; border-radius: 9px; background: #242322; }
+.matka60-progress span { display: block; width: 35%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f5bd30,#18a961); animation: matka60-progress 3s ease-in-out infinite alternate; }
+@keyframes matka60-progress { from { transform: translateX(-20%); } to { transform: translateX(220%); } }
+.matka60-motor { display: grid; justify-items: center; gap: 7px; margin: 0 0 16px; }
+.matka60-motor-frame { display: grid; width: min(100%,500px); min-height: 125px; place-items: center; padding: 13px 20px; border: 8px ridge #b98d28; border-radius: 31px; color: #080808; background: linear-gradient(180deg,#dce5da,#fff 46%,#b4c1b6); box-shadow: inset 0 0 0 5px #078a4b,0 6px 15px #44270c40; }
+.matka60-motor-digits { display: grid; grid-template-columns: repeat(3,minmax(55px,1fr)); align-items: center; gap: 14px; width: min(100%,350px); text-align: center; }
+.matka60-motor-digits span { display: block; font: 900 clamp(54px,15vw,82px)/1 "Manrope",sans-serif; }
+.matka60-motor-digits.is-spinning span { animation: matka60-roll .28s ease-in-out infinite alternate; }
+.matka60-motor-digits.is-spinning span:nth-child(2) { animation-delay: .07s; }
+.matka60-motor-digits.is-spinning span:nth-child(3) { animation-delay: .14s; }
+@keyframes matka60-roll { from { transform: translateY(-3px) rotateX(7deg); filter: blur(.4px); } to { transform: translateY(3px) rotateX(-7deg); filter: blur(0); } }
+.matka60-motor p { margin: 0; color: #655465; font-size: 11px; font-weight: 700; text-align: center; }
+.matka60-help-panel,.matka60-warning { margin: 0 0 12px; padding: 12px; border: 1px solid #ebc4d7; border-radius: 13px; background: #fff; font-size: 12px; line-height: 1.55; }
+.matka60-help-panel { display: grid; gap: 4px; }
+.matka60-help-panel strong { font-size: 14px; }
+.matka60-warning { color: #8b300d; background: #fff3e7; }
+.matka60-bet-card,.matka60-session-bets,.matka60-history-card { margin: 0 0 14px; padding: 14px; border: 1px solid #dedde2; border-radius: 20px; background: #fff; box-shadow: 0 4px 10px #37294320; }
+.matka60-bet-card h2,.matka60-session-bets h2 { margin: 0 0 10px; color: #45434a; font-size: 15px; font-weight: 900; text-align: center; }
+.matka60-type-toggle,.matka60-history-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; border-radius: 12px; background: #edf0f2; }
+.matka60-type-toggle button,.matka60-history-tabs button { min-height: 45px; border: 0; border-radius: 9px; color: #6d7076; background: transparent; font-weight: 900; }
+.matka60-type-toggle button.active,.matka60-history-tabs button.active { color: #fff; background: #08a263; box-shadow: 0 2px 5px #007b4b40; }
+.matka60-selection-label { margin: 13px 0 8px; color: #515058; font-size: 12px; font-weight: 900; }
+.matka60-digit-strip { display: grid; grid-template-columns: repeat(10,minmax(30px,1fr)); gap: 5px; overflow-x: auto; padding: 3px 0 8px; }
+.matka60-digit-strip button,.matka60-number-grid button,.matka60-panna-grid button { min-width: 0; min-height: 47px; border: 1px solid #d9dce0; border-radius: 9px; color: #17191b; background: #f9fafb; font-size: 19px; font-weight: 800; box-shadow: 0 1px 2px #0000000b; }
+.matka60-digit-strip button { min-height: 40px; font-size: 16px; }
+.matka60-number-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px; margin: 12px 0 16px; }
+.matka60-number-grid button { min-height: 58px; font-size: 23px; }
+.matka60-panna-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; max-height: 260px; overflow-y: auto; margin: 8px 0 14px; padding: 5px; border: 1px solid #e1e1e3; border-radius: 12px; }
+.matka60-panna-grid button { min-height: 42px; font-size: 15px; }
+.matka60-number-grid button.selected,.matka60-digit-strip button.selected,.matka60-panna-grid button.selected { border-color: #07965d; color: #fff; background: #08a263; }
+.matka60-quick-adds { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; margin: 15px 0; }
+.matka60-quick-adds button { min-height: 42px; border: 1px solid #178849; border-radius: 9px; color: #148047; background: #fff; font-size: 13px; font-weight: 900; }
+.matka60-place-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); gap: 9px; }
+.matka60-amount { display: flex; overflow: hidden; min-height: 56px; border: 1px solid #d2d5d9; border-radius: 12px; background: #f6f8fa; }
+.matka60-amount span { display: grid; min-width: 39px; place-items: center; border-right: 1px solid #d2d5d9; font-size: 18px; font-weight: 800; }
+.matka60-amount input { width: 100%; min-width: 0; padding: 0 9px; border: 0; outline: 0; background: transparent; font-size: 22px; font-weight: 900; }
+.matka60-place-row>button { min-height: 56px; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(115deg,#0ac57c,#07975c); font-size: clamp(14px,4vw,19px); font-weight: 900; box-shadow: 0 3px 6px #05844e30; }
+.matka60-place-row>button:disabled { color: #747984; background: #c9ccd3; box-shadow: none; }
+.matka60-session-bets h2 { text-align: left; }
+.matka60-session-bets>p,.matka60-empty { margin: 12px 0 4px; color: #a2a4a9; font-size: 12px; }
+.matka60-session-bets>div,.matka60-history-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 2px; border-top: 1px solid #ececef; }
+.matka60-session-bets>div span { display: flex; align-items: center; gap: 7px; font-weight: 800; }
+.matka60-session-bets small { color: #82858b; font-size: 10px; }
+.matka60-history-card { padding: 10px; }
+.matka60-history-tabs { margin-bottom: 8px; }
+.matka60-history-tabs button { min-height: 40px; font-size: 12px; }
+.matka60-history-head { display: grid; grid-template-columns: 1fr 55px 110px; gap: 5px; padding: 8px 3px; color: #737782; font-size: 11px; font-weight: 900; }
+.matka60-history-head span:nth-child(2) { text-align: center; }
+.matka60-history-head span:last-child { text-align: right; }
+.matka60-history-row>span:first-child { display: grid; gap: 3px; }
+.matka60-history-row strong { font-size: 13px; }
+.matka60-history-row small { color: #777a81; font-size: 11px; }
+.matka60-history-row>span:nth-child(2) { width: 55px; text-align: center; font-size: 18px; }
+.matka60-result-digits { display: flex; gap: 4px; }
+.matka60-result-digits b { display: grid; width: 28px; height: 32px; place-items: center; border: 1px solid #d7d9de; border-radius: 5px; background: #f5f6f8; font-size: 17px; }
+.matka60-history-list>.matka60-history-row:not(.matka60-result-row) small { display: inline; }
+
+@media (max-width: 760px) {
+  .matka60-page { width: 100%; padding-right: 12px; padding-left: 12px; }
+  .matka60-round-info>div { min-height: 78px; }
+  .matka60-motor-frame { min-height: 115px; }
+  .matka60-bet-card { padding: 12px; }
 }
