@@ -10,8 +10,8 @@ const firebaseConfig = {
 };
 const DEFAULT_WEBSITE_URL = "https://a2morningapp.vercel.app";
 const MATKA60_API_URL = "https://a2morning.mama567.bond/matka60-api.php";
-const MATKA60_SERVER_AUTHORIZED_BETS_READY = true;
-const MATKA60_SERVER_API_READY = true;
+const MATKA60_SERVER_AUTHORIZED_BETS_READY = false;
+const MATKA60_SERVER_API_READY = false;
 
 if (window.firebase && !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
@@ -1161,6 +1161,7 @@ async function enterApp(verifyRestoredAccount = false) {
   }
   stopRealtimeSubscriptions();
   state.page = "home";
+  console.log("Screenshot : Off");
   pageHistory.length = 0;
   state.balance = 0;
   state.balancePath = "";
@@ -1622,7 +1623,7 @@ function matka60PreviousPeriodId(timestamp) {
 }
 
 function startMatka60Feed() {
-  if (!state.user || !matka60FirebaseApp || matka60ClockRef) return;
+  if (!MATKA60_SERVER_API_READY || !state.user || !matka60FirebaseApp || matka60ClockRef) return;
   const database = matka60FirebaseApp.database();
   state.matka60ClockSynced = false;
   matka60ClockRef = database.ref(".info/serverTimeOffset");
@@ -1689,8 +1690,17 @@ function matka60ValidResult(record) {
 }
 
 function matka60ResultIsFinalized(record) {
-  if (typeof record === "string") return Boolean(matka60ValidResult(record));
-  return Boolean(record && typeof record === "object" && record.finalized === true);
+  return Boolean(
+    record &&
+    typeof record === "object" &&
+    record.finalized === true &&
+    matka60ValidResult(record)
+  );
+}
+
+function matka60PreviousRoundIsFinalized(timestamp = matka60ServerNow()) {
+  return timestamp !== null
+    && matka60ResultIsFinalized(state.matka60Results[matka60PreviousPeriodId(timestamp)]);
 }
 
 function matka60BidSettlementFor(bid) {
@@ -1701,9 +1711,26 @@ function matka60BidSettlementFor(bid) {
 function matka60LatestResult() {
   const serverNow = matka60ServerNow();
   if (serverNow === null) return null;
-  const completedPeriod = matka60PreviousPeriodId(serverNow);
-  const result = matka60ValidResult(state.matka60Results[completedPeriod]);
-  return result ? { period: completedPeriod, result } : null;
+  const currentPeriod = matka60PeriodId(serverNow);
+  return Object.entries(state.matka60Results || {})
+    .filter(([period, record]) => period < currentPeriod && matka60ResultIsFinalized(record))
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([period, record]) => ({ period, result: matka60ValidResult(record) }))
+    .find(item => item.result) || null;
+}
+
+function matka60PendingFinalizationPeriod() {
+  const serverNow = matka60ServerNow();
+  if (serverNow === null) return "";
+  const currentPeriod = matka60PeriodId(serverNow);
+  return Object.entries(state.matka60Results || {})
+    .filter(([period, record]) =>
+      period < currentPeriod &&
+      matka60ValidResult(record) &&
+      !matka60ResultIsFinalized(record)
+    )
+    .map(([period]) => period)
+    .sort((left, right) => right.localeCompare(left))[0] || "";
 }
 
 function updateMatka60Clock() {
@@ -1733,12 +1760,15 @@ function updateMatka60Clock() {
     return;
   }
   const latestResult = matka60LatestResult();
+  const pendingPeriod = matka60PendingFinalizationPeriod();
   motor.classList.add("is-spinning");
   motor.innerHTML = Array.from({ length: 3 }, () => `<span>${Math.floor(Math.random() * 10)}</span>`).join("");
   status.textContent = state.matka60ResultsError
-    || (latestResult
-      ? `Last official result · round #${latestResult.period}: ${latestResult.result}`
-      : "Random motor preview · waiting for the manually published result");
+    || (pendingPeriod
+      ? `Round #${pendingPeriod} result is published and awaiting final confirmation. Wallet settlement starts after finalization.${latestResult ? ` Last official result · round #${latestResult.period}: ${latestResult.result}` : ""}`
+      : latestResult
+        ? `Last official result · round #${latestResult.period}: ${latestResult.result}`
+        : "Random motor preview · waiting for the manually published result");
 }
 
 function matka60BetHistoryForPeriod(periodId) {
@@ -1766,7 +1796,10 @@ function renderMatka60History() {
       : `<p class="matka60-empty">Your Matka 60 bets will appear here.</p>`}</div>`;
   }
   const results = Object.entries(state.matka60Results || {})
-    .map(([period, record]) => ({ period, result: matka60ValidResult(record) }))
+    .map(([period, record]) => ({
+      period,
+      result: matka60ResultIsFinalized(record) ? matka60ValidResult(record) : ""
+    }))
     .filter(item => item.result && item.period < state.matka60RoundId)
     .sort((left, right) => right.period.localeCompare(left.period))
     .slice(0, 10);
@@ -1794,7 +1827,9 @@ function renderMatka60() {
       : !MATKA60_SERVER_AUTHORIZED_BETS_READY || !MATKA60_SERVER_API_READY
         ? "Matka 60 is paused until server-authorized bets and database write rules are configured."
         : state.matka60ResultsError ? "The shared game feed is unavailable. Betting is paused."
-          : !state.matka60ClockSynced ? "Syncing the shared game clock. Betting is paused." : "";
+          : !state.matka60ClockSynced ? "Syncing the shared game clock. Betting is paused."
+            : !matka60PreviousRoundIsFinalized(serverNow)
+              ? `Waiting for the official result for round #${matka60PreviousPeriodId(serverNow)}. Betting is paused.` : "";
   const selectionButtons = state.matka60BetType === "ank"
     ? `<div class="matka60-number-grid">${Array.from({ length: 10 }, (_, digit) => `<button type="button" class="${state.matka60Digit === String(digit) ? "selected" : ""}" data-matka60-number="${digit}">${digit}</button>`).join("")}</div>`
     : `<p class="matka60-selection-label">SELECT PANNA(S) FOR (${safeText(state.matka60Digit)}) · Selected: ${selectedPannas.length}</p><div class="matka60-panna-grid">${matka60PannasForDigit(state.matka60Digit).map(number => `<button type="button" class="${selectedPannas.includes(number) ? "selected" : ""}" data-matka60-number="${number}">${number}</button>`).join("")}</div>`;
@@ -1883,13 +1918,8 @@ function setPage(page, recordHistory = true) {
   state.supportDialogVisible = false;
   if (recordHistory && state.user && state.page !== page) pageHistory.push(state.page);
   state.page = page;
+  console.log(page === "deposit" ? "Screenshot : On" : "Screenshot : Off");
   if (page === "matka60") startMatka60Feed();
-  if (window.ReactNativeWebView) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({
-      type: "screen-capture",
-      prevent: page === "bids" || page === "points"
-    }));
-  }
   if (page === "withdraw") state.withdrawalDialogVisible = !withdrawalWindowAt(marketNow()).open;
   else {
     state.withdrawalDialogVisible = false;
@@ -1957,6 +1987,27 @@ function handleAppBack() {
 }
 
 window.__a2HandleBack = handleAppBack;
+window.__a2HandleNativeBack = () => {
+  if (!state.user) {
+    console.log("back-application");
+    return;
+  }
+  if (state.supportDialogVisible || query("#sidebar").classList.contains("open")
+    || !query("#exit-dialog").classList.contains("hidden")) {
+    handleAppBack();
+    return;
+  }
+  const previousPage = pageHistory.pop();
+  if (previousPage) {
+    setPage(previousPage, false);
+    return;
+  }
+  if (state.page !== "home") {
+    setPage("home", false);
+    return;
+  }
+  console.log("back-application");
+};
 window.__a2PaymentReturned = () => {
   if (!state.user) return;
   try {
@@ -2821,6 +2872,10 @@ async function submitMatka60Bid(event) {
     return;
   }
   const serverNow = matka60ServerNow();
+  if (!matka60PreviousRoundIsFinalized(serverNow)) {
+    notify(`The official result for round #${matka60PreviousPeriodId(serverNow)} is not finalized yet. Betting is paused.`, "error");
+    return;
+  }
   const currentPeriodId = serverNow === null ? "" : matka60PeriodId(serverNow);
   const secondsLeft = serverNow === null ? 0 : Math.ceil((60000 - (serverNow % 60000)) / 1000);
   const selections = state.matka60BetType === "ank"
