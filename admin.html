@@ -3,18 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#101827">
-    <meta name="a2morning-admin-build" content="2026-10-14-a2morning-admin-v1">
-    <title>A2 MORNING Admin</title>
-    <link rel="icon" type="image/png" href="a2morning.png">
-    <link rel="stylesheet" href="admin.css?v=2026-10-14-a2morning-admin-v1">
+    <meta name="theme-color" content="#0c1d32">
+    <meta name="sridevi-matka-admin-build" content="2026-10-23-admin-session-resume">
+    <title>Sridevi Matka Admin</title>
+    <link rel="icon" type="image/png" href="../a2morning-logo.png">
+    <link rel="stylesheet" href="admin.css?v=2026-11-06-webplay-access">
+    <link rel="stylesheet" href="sridevi-matka-admin-theme.css?v=2026-10-25">
   </head>
   <body>
-    <main class="admin-login" id="admin-login">
+    <main class="admin-session-check" id="admin-session-check" role="status" aria-live="polite">
+      <img src="../a2morning-logo.png" alt="" class="login-logo">
+      <strong>Sridevi Matka Admin</strong>
+      <span>Checking your session…</span>
+    </main>
+    <main class="admin-login" id="admin-login" hidden>
       <section class="login-card" aria-labelledby="login-title">
         <div class="login-brand">
-          <img src="a2morning.png" alt="" class="login-logo">
-          <span><strong>A2 MORNING</strong><small>ADMIN CONSOLE</small></span>
+          <img src="../a2morning-logo.png" alt="" class="login-logo">
+          <span><strong>Sridevi Matka</strong><small>ADMIN CONSOLE</small></span>
         </div>
         <div class="login-heading">
           <span class="login-icon" aria-hidden="true">◆</span>
@@ -30,14 +36,14 @@
           <p class="login-error" id="admin-login-error" role="alert" aria-live="polite"></p>
           <button class="login-submit" id="admin-login-submit" type="submit"><span>Sign in</span><span aria-hidden="true">→</span></button>
         </form>
-        <div class="login-footer"><span></span>Authorized administrators only · Build 2026-10-14-a2morning-admin-v1</div>
+        <div class="login-footer"><span></span>Authorized administrators only · Build 2026-10-23-admin-session-resume</div>
       </section>
     </main>
     <div class="app-shell" id="admin-app" hidden>
       <aside class="sidebar" id="sidebar">
         <a class="brand" href="#" data-page="dashboard">
-          <img src="a2morning.png" alt="" class="brand-logo">
-          <span><strong>A2 MORNING</strong><small>ADMIN CONSOLE</small></span>
+          <img src="../a2morning-logo.png" alt="" class="brand-logo">
+          <span><strong>Sridevi Matka</strong><small>ADMIN CONSOLE</small></span>
         </a>
         <div class="workspace-label">WORKSPACE</div>
         <nav id="navigation" aria-label="Main navigation"></nav>
@@ -52,6 +58,7 @@
         <header class="topbar">
           <button class="icon-button mobile-menu" data-action="toggle-menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">☰</button>
           <div class="breadcrumbs"><span>Admin</span><b>/</b><strong id="page-crumb">Dashboard</strong></div>
+          <div class="topbar-totals" id="topbar-totals" aria-label="Today's played and winning amounts"></div>
           <div class="top-actions">
             <span class="date-chip" id="today-date"></span>
             <button class="avatar-button" data-action="profile" aria-label="Admin profile">A</button>
@@ -64,6 +71,6 @@
     <div id="toast-root" class="toast-root" aria-live="polite"></div>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-    <script src="admin.js?v=2026-10-14-a2morning-admin-v1"></script>
+    <script src="admin.js?v=2026-11-06-webplay-access"></script>
   </body>
 </html>

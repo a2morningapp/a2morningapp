@@ -1,12 +1,12 @@
 const firebaseConfig = {
-  apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
-  authDomain: "a2moring.firebaseapp.com",
-  databaseURL: "https://a2moring-default-rtdb.firebaseio.com",
-  projectId: "a2moring",
-  storageBucket: "a2moring.firebasestorage.app",
-  messagingSenderId: "528466835850",
-  appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
-  measurementId: "G-2HVR18MNEZ",
+  apiKey: "AIzaSyDztx_uEYlkfpthoEJSzwJY45ehlIMbjMw",
+  authDomain: "a2morning-in-website-new-db.firebaseapp.com",
+  databaseURL: "https://a2morning-in-website-new-db-default-rtdb.firebaseio.com",
+  projectId: "a2morning-in-website-new-db",
+  storageBucket: "a2morning-in-website-new-db.firebasestorage.app",
+  messagingSenderId: "377129823562",
+  appId: "1:377129823562:web:32d90bd8964bf040a225b3",
+  measurementId: "G-5GXYJREWR1",
 };
 const expertGuessingFirebaseConfig = {
   apiKey: "AIzaSyCGqJ1XvEYbgJ_eN5OEuzAymc3E4wKr8eI",
@@ -19,13 +19,116 @@ const expertGuessingFirebaseConfig = {
   measurementId: "G-FD7MK1CWCK",
 };
 const resultChartDatabaseUrl = expertGuessingFirebaseConfig.databaseURL;
-const DEFAULT_RESULT_CHART_URL = new URL("result.html", window.location.href).href;
-const ADMIN_SESSION_KEY = "a2morningAdminSession";
-const ADMIN_CREDENTIAL_FINGERPRINT_KEY = "a2morningAdminCredentialFingerprint";
-const BROADCAST_ENDPOINT_KEY = "a2morningBroadcastEndpoint";
-const BROADCAST_TOKEN_KEY = "a2morningBroadcastToken";
-const BROADCAST_SENDER_VERSION = "2026-10-14-a2morning-admin-v1";
-const BROADCAST_IMAGE_URL = new URL("a2morning.png", window.location.href).href;
+
+// OneSignal — client REST (no backend). REST key is visible in this admin JS by design (dj request).
+const ONESIGNAL_APP_ID = "e1183bae-f7b7-4122-90a7-10d72adf87e2";
+const ONESIGNAL_REST_API_KEY = "os_v2_app_4emdxlxxw5asfefhcdlsvx4h4kweg24z24deul5xaonmta3uolyxpd5fmi77p25jh6leavctolwtbtlr5xz47oaoye6n27nvut6k6vq";
+const ONESIGNAL_API = "https://api.onesignal.com/notifications";
+// Push player IDs live on a2moring (not the main website data tree).
+const PUSH_HUB_CONFIG = {
+  apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
+  authDomain: "a2moring.firebaseapp.com",
+  databaseURL: "https://a2moring-default-rtdb.firebaseio.com",
+  projectId: "a2moring",
+  storageBucket: "a2moring.firebasestorage.app",
+  messagingSenderId: "528466835850",
+  appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
+  measurementId: "G-2HVR18MNEZ",
+};
+let pushHubApp = null;
+let pushHubDb = null;
+
+function getPushHubDb() {
+  if (!window.firebase?.database) return null;
+  if (pushHubDb) return pushHubDb;
+  pushHubApp = firebase.apps.find(app => app.name === "push-hub")
+    || firebase.initializeApp(PUSH_HUB_CONFIG, "push-hub");
+  pushHubDb = firebase.database(pushHubApp);
+  return pushHubDb;
+}
+
+async function fetchPushIdForPhone(phone) {
+  const mobile = String(phone || "").replace(/\D/g, "");
+  if (!/^\d{10,}$/.test(mobile)) return "";
+  // Prefer the push hub All Users/{phone}/push
+  try {
+    const hub = getPushHubDb();
+    if (hub) {
+      const snap = await hub.ref(`All Users/${mobile}/push`).once("value");
+      const val = snap.val();
+      const id = typeof val === "string" ? val.trim() : (val && typeof val === "object" ? String(val.id || val.push || "").trim() : "");
+      if (id) return id;
+    }
+  } catch (error) {
+    console.warn("Push hub read failed", error);
+  }
+  // Fallback: main Sridevi DATA/{phone}/push
+  try {
+    if (databaseRootRef) {
+      const snap = await databaseRootRef.child(`DATA/${mobile}/push`).once("value");
+      const val = snap.val();
+      const id = typeof val === "string" ? val.trim() : "";
+      if (id) return id;
+    }
+  } catch (error) {
+    console.warn("DATA push read failed", error);
+  }
+  return "";
+}
+
+async function onesignalCreateNotification(body) {
+  const response = await fetch(ONESIGNAL_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Authorization: `Key ${ONESIGNAL_REST_API_KEY}`,
+    },
+    body: JSON.stringify({
+      app_id: ONESIGNAL_APP_ID,
+      ...body,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.errors ? JSON.stringify(payload.errors) : (payload?.error || `OneSignal HTTP ${response.status}`));
+  }
+  return payload;
+}
+
+/** Broadcast to entire subscribed app audience. */
+async function onesignalBroadcast(title, message, data = {}) {
+  return onesignalCreateNotification({
+    included_segments: ["All"],
+    headings: { en: String(title || "Sridevi Matka") },
+    contents: { en: String(message || "") },
+    data,
+  });
+}
+
+/** Send to one or more OneSignal player / subscription ids. */
+async function onesignalToPlayerIds(playerIds, title, message, data = {}) {
+  const ids = [...new Set((playerIds || []).map(id => String(id || "").trim()).filter(Boolean))];
+  if (!ids.length) throw new Error("No push subscription id for this user.");
+  return onesignalCreateNotification({
+    include_subscription_ids: ids,
+    headings: { en: String(title || "Sridevi Matka") },
+    contents: { en: String(message || "") },
+    data,
+  });
+}
+
+async function notifyUserByPhone(phone, title, message, data = {}) {
+  const pushId = await fetchPushIdForPhone(phone);
+  if (!pushId) {
+    console.warn("No push id for", phone);
+    return { skipped: true, reason: "no_push_id" };
+  }
+  return onesignalToPlayerIds([pushId], title, message, data);
+}
+
+const ADMIN_SESSION_KEY = "srideviMatkaAdminSession";
+const ADMIN_CREDENTIAL_FINGERPRINT_KEY = "srideviMatkaAdminCredentialFingerprint";
+const BROADCAST_ENDPOINT = new URL("onesignal.php", document.currentScript?.src || document.baseURI).href;
 const DEFAULT_WITHDRAWAL_WINDOWS = {
   morning: { open: "09:30", close: "13:30" },
   evening: { open: "18:45", close: "21:00" },
@@ -39,30 +142,12 @@ const MARKET_WEEKDAYS = [
   { name: "Saturday", bucket: "GAMES2" },
   { name: "Sunday", bucket: "GAMES3" },
 ];
-const pendingBroadcasts = new Map();
 let adminExpertGuessing = {};
 let adminExpertGuessingLoaded = false;
 let adminExpertGuessingLoadInProgress = false;
 let adminExpertGuessingSeedInProgress = false;
 let withdrawalWindowsSeedStarted = false;
 const generatedExpertGuessing = new Map();
-
-function migrateStorageKey(storage, oldKey, newKey) {
-  if (!storage.getItem(newKey)) {
-    const oldValue = storage.getItem(oldKey);
-    if (oldValue) storage.setItem(newKey, oldValue);
-  }
-}
-
-migrateStorageKey(localStorage, "kalyanGoldAdminSession", ADMIN_SESSION_KEY);
-migrateStorageKey(localStorage, "kalyanGoldBroadcastEndpoint", BROADCAST_ENDPOINT_KEY);
-if (!localStorage.getItem(BROADCAST_TOKEN_KEY)) {
-  const previousToken = sessionStorage.getItem(BROADCAST_TOKEN_KEY)
-    || sessionStorage.getItem("kalyanGoldBroadcastToken");
-  if (previousToken) localStorage.setItem(BROADCAST_TOKEN_KEY, previousToken);
-}
-sessionStorage.removeItem(BROADCAST_TOKEN_KEY);
-sessionStorage.removeItem("kalyanGoldBroadcastToken");
 
 const navigation = [
   { section: "OVERVIEW" },
@@ -81,6 +166,7 @@ const navigation = [
   { id: "played", label: "Bid history & played games", icon: "▦" },
   { id: "reports", label: "Reports", icon: "▥" },
   { id: "notices", label: "Notices", icon: "◉" },
+  { id: "push-notify", label: "Push notifications", icon: "🔔" },
   { id: "settings", label: "Game settings", icon: "⚙" },
   { section: "PLAYER APP PREVIEW" },
   { id: "player-app", label: "Place a game", icon: "♟" },
@@ -111,13 +197,13 @@ const defaultData = {
   requests: [],
   transactions: [],
   rates: [
-    { id: "Single Digit", value: 9.5 },
-    { id: "Jodi Digit", value: 95 },
-    { id: "Single Pana", value: 150 },
-    { id: "Double Pana", value: 300 },
-    { id: "Triple Pana", value: 700 },
-    { id: "Half Sangam", value: 1000 },
-    { id: "Full Sangam", value: 10000 },
+    { id: "Single Digit", value: 95 },
+    { id: "Jodi Digit", value: 9800 },
+    { id: "Single Pana", value: 1450 },
+    { id: "Double Pana", value: 2900 },
+    { id: "Triple Pana", value: 6500 },
+    { id: "Half Sangam", value: 10000 },
+    { id: "Full Sangam", value: 100000 },
   ],
   bets: [],
   settlements: [],
@@ -128,6 +214,13 @@ const defaultData = {
     closeBets: true,
     signUpBonus: 0,
     minimumDeposit: 0,
+    qrCodeEnabled: true,
+    directPaymentEnabled: false,
+    paymentGatewayEnabled: false,
+    qrCode: "",
+    upiId: "",
+    upiUrlTemplate: "",
+    paymentGatewayUrl: "",
     minimumWithdrawal: 0,
     minimumEntry: 0,
     maximumEntry: 0,
@@ -136,10 +229,12 @@ const defaultData = {
     withdrawalWindowsConfigured: false,
     policy: "",
     websiteUrl: "",
+    matka60Url: "",
+    matka30Url: "",
     contactUrl: "",
     telegramUrl: "",
-    resultChartUrl: DEFAULT_RESULT_CHART_URL,
-    noticeTitle: "Welcome to A2 MORNING",
+    resultChartUrl: "",
+    noticeTitle: "Welcome to Sridevi Matka",
     noticeMessage: "Good luck and play responsibly.",
   },
 };
@@ -367,8 +462,8 @@ async function fetchAdminExpertGuessing() {
 }
 
 function expertGuessingDatabaseRef() {
-  const app = firebase.apps.find(item => item.name === "a2morning-expert-guessing")
-    || firebase.initializeApp(expertGuessingFirebaseConfig, "a2morning-expert-guessing");
+  const app = firebase.apps.find(item => item.name === "sridevi-matka-expert-guessing")
+    || firebase.initializeApp(expertGuessingFirebaseConfig, "sridevi-matka-expert-guessing");
   return firebase.database(app).ref("ExpertGuessing");
 }
 
@@ -508,7 +603,7 @@ function legacyPaymentRequest(value, kind) {
     return { amount, amountUnavailable: amount === null, method: "Legacy record", details: "", balanceDeducted: false, status: "Pending" };
   }
   const rawStatus = String(decoded.at(-1) || "").trim();
-  const status = ["Approved", "Refunded", "Rejected", "Deleted"].find(item => item.toLowerCase() === rawStatus.toLowerCase()) || "Pending";
+  const status = ["Approved", "Refunded", "Rejected", "Deleted", "Failed", "Cancelled"].find(item => item.toLowerCase() === rawStatus.toLowerCase()) || "Pending";
 
   if (kind === "Deposit") {
     const amount = Number(decoded[3]);
@@ -521,6 +616,7 @@ function legacyPaymentRequest(value, kind) {
       details: [
         reference && `Reference: ${reference}`,
         decoded[4] !== undefined && decoded[4] !== "" && Number.isFinite(balance) && `Balance at request: ${money(balance)}`,
+        String(decoded[5] || "").startsWith("UPI app reported") && String(decoded[5]),
       ].filter(Boolean).join(" · "),
       balanceDeducted: false,
       status,
@@ -609,6 +705,7 @@ function normalizeLegacyData(root) {
         close: String(fields[2] || ""),
         status: /close|stop|off/i.test(statusValue) ? "Closed" : "Open",
         result: "—",
+        resultDate: String(marketMetadata.resultDate || ""),
         position: numberFromLegacy(fields[7] || id),
         days,
         legacyEntries: { [source]: id },
@@ -846,20 +943,40 @@ function normalizeLegacyData(root) {
   for (const player of legacy.players) {
     player.played = playedByMobile.get(player.mobile) || 0;
     const walletRecords = sourcePlayers[player.mobile]?.transactions;
-    if (!walletRecords || typeof walletRecords !== "object" || Array.isArray(walletRecords)) continue;
-    for (const [key, rawRecord] of Object.entries(walletRecords)) {
-      const record = decodeLegacyValue(rawRecord);
-      if (!record || typeof record !== "object" || Array.isArray(record)) continue;
-      const transaction = {
-        id: String(record.id || key),
-        player: player.name,
-        mobile: player.mobile,
-        type: String(record.type || "Wallet"),
-        amount: numberFromLegacy(record.amount),
-        date: String(record.date || record.createdAt || ""),
-        note: String(record.note || record.title || record.type || "Wallet activity"),
-      };
-      legacy.transactions.push(transaction);
+    if (walletRecords && typeof walletRecords === "object" && !Array.isArray(walletRecords)) {
+      for (const [key, rawRecord] of Object.entries(walletRecords)) {
+        const record = decodeLegacyValue(rawRecord);
+        if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+        const transaction = {
+          id: String(record.id || key),
+          player: player.name,
+          mobile: player.mobile,
+          type: String(record.type || "Wallet"),
+          amount: numberFromLegacy(record.amount),
+          date: String(record.date || record.createdAt || ""),
+          note: String(record.note || record.title || record.type || "Wallet activity"),
+        };
+        legacy.transactions.push(transaction);
+      }
+    }
+    const demoWallet = decodeLegacyValue(sourcePlayers[player.mobile]?.demoWallet);
+    const demoTransactions = demoWallet && typeof demoWallet === "object" && !Array.isArray(demoWallet)
+      ? demoWallet.transactions : null;
+    if (demoTransactions && typeof demoTransactions === "object" && !Array.isArray(demoTransactions)) {
+      for (const [key, rawRecord] of Object.entries(demoTransactions)) {
+        const record = decodeLegacyValue(rawRecord);
+        if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+        legacy.transactions.push({
+          id: String(record.orderId || record.id || key),
+          player: player.name,
+          mobile: player.mobile,
+          type: "Demo test",
+          amount: numberFromLegacy(record.amount),
+          date: String(record.date || record.createdAt || ""),
+          note: `DEMO ONLY — ${String(record.note || "UPI app test; not a verified payment.")}`,
+          demo: true,
+        });
+      }
     }
   }
 
@@ -876,6 +993,17 @@ function normalizeLegacyData(root) {
       ? true : /^(true|1|yes|on)$/i.test(String(adminSettings.EnableCloseBets));
     legacy.settings.signUpBonus = numberFromLegacy(adminSettings["Sign Up Bonus"] ?? adminSettings.bonus ?? adminSettings.Bonus);
     legacy.settings.minimumDeposit = numberFromLegacy(adminSettings.MD);
+    legacy.settings.qrCodeEnabled = adminSettings.QrCodeEnabled === undefined
+      ? true : /^(true|1|yes|on)$/i.test(String(adminSettings.QrCodeEnabled));
+    legacy.settings.directPaymentEnabled = adminSettings.DirectPaymentEnabled === undefined
+      ? false : /^(true|1|yes|on)$/i.test(String(adminSettings.DirectPaymentEnabled));
+    legacy.settings.paymentGatewayEnabled = adminSettings.PaymentGatewayEnabled === undefined
+      ? Boolean(adminSettings.payment_api_url)
+      : /^(true|1|yes|on)$/i.test(String(adminSettings.PaymentGatewayEnabled));
+    legacy.settings.qrCode = String(decodeLegacyValue(adminSettings["Qr Code"] ?? adminSettings.qr_code) || "");
+    legacy.settings.upiId = String(decodeLegacyValue(adminSettings.upi_id) || "");
+    legacy.settings.upiUrlTemplate = String(decodeLegacyValue(adminSettings["Admin Upi"] ?? adminSettings.admin_upi) || "");
+    legacy.settings.paymentGatewayUrl = String(decodeLegacyValue(adminSettings.payment_api_url) || "");
     legacy.settings.minimumWithdrawal = numberFromLegacy(adminSettings.MW);
     legacy.settings.minimumEntry = numberFromLegacy(adminSettings["Min Entry"]);
     legacy.settings.maximumEntry = numberFromLegacy(adminSettings["Max Entry"]);
@@ -885,11 +1013,11 @@ function normalizeLegacyData(root) {
     const policy = decodeLegacyValue(adminSettings.Policy);
     legacy.settings.policy = Array.isArray(policy) ? policy.join("\n\n") : String(policy || "");
     legacy.settings.websiteUrl = String(decodeLegacyValue(adminSettings.Website) || "");
+    legacy.settings.matka60Url = String(decodeLegacyValue(adminSettings.matka60url) || "");
+    legacy.settings.matka30Url = String(decodeLegacyValue(adminSettings.matka30url) || "");
     legacy.settings.contactUrl = String(decodeLegacyValue(adminSettings.Contact) || "");
     legacy.settings.telegramUrl = String(decodeLegacyValue(adminSettings.Telegram ?? adminSettings.TG) || "");
-    const configuredResultChartUrl = String(decodeLegacyValue(adminSettings["Market_Reult_chart_Web"]) || "").trim();
-    legacy.settings.resultChartUrl = configuredResultChartUrl && !/^https:\/\/mama567\.bond\/result\.html\/?$/i.test(configuredResultChartUrl)
-      ? configuredResultChartUrl : DEFAULT_RESULT_CHART_URL;
+    legacy.settings.resultChartUrl = String(decodeLegacyValue(adminSettings["Market_Reult_chart_Web"]) || "");
   }
   return legacy;
 }
@@ -937,6 +1065,14 @@ function lastSeenLabel(mobile) {
   return date.toLocaleString("en-IN", options);
 }
 
+function lastSeenTimestamp(mobile) {
+  const value = lastSeenByMobile.get(String(mobile || ""))?.value;
+  if (!value) return null;
+  if (/^\d{10,13}$/.test(value)) return Number(value) * (value.length === 10 ? 1000 : 1);
+  const timestamp = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
 function readGameAccessByMobile(root) {
   const players = root.DATA;
   if (!players || typeof players !== "object" || Array.isArray(players)) return new Set();
@@ -959,6 +1095,107 @@ function whatsappLink(mobile) {
 function gameAccessLabel(mobile) {
   const hasAccess = gameAccessByMobile.has(String(mobile || ""));
   return `<span class="status game-access ${hasAccess ? "game-access-enabled" : "game-access-disabled"}">${hasAccess ? "Game access" : "No game access"}</span>`;
+}
+
+function watchWebPlayAccess(mobile) {
+  const phone = String(mobile || "").replace(/\D/g, "");
+  if (!/^\d{10,}$/.test(phone) || webPlayAccessListeners.has(phone)) return;
+  const db = getPushHubDb();
+  if (!db) {
+    webPlayAccessByMobile.set(phone, "error");
+    return;
+  }
+
+  const ref = db.ref(`DATA/${phone}/WV`);
+  webPlayAccessByMobile.set(phone, null);
+  webPlayAccessListeners.set(phone, ref);
+  try {
+    ref.on("value", (snapshot) => {
+      webPlayAccessByMobile.set(phone, isTruthySetting(snapshot.val()));
+      if (currentPage === "players" || currentPage === "new-users") render(true);
+    }, (error) => {
+      webPlayAccessByMobile.set(phone, "error");
+      toast(`Could not read WebPlay access for ${phone}: ${error.message}`, true);
+      if (currentPage === "players" || currentPage === "new-users") render(true);
+    });
+  } catch (error) {
+    webPlayAccessByMobile.set(phone, "error");
+    webPlayAccessListeners.delete(phone);
+    toast(`Could not monitor WebPlay access for ${phone}: ${error.message}`, true);
+  }
+}
+
+function webPlayAccessControl(mobile) {
+  const phone = String(mobile || "").replace(/\D/g, "");
+  if (!/^\d{10,}$/.test(phone)) {
+    return `<span class="status webplay-access-unavailable">No phone</span>`;
+  }
+  watchWebPlayAccess(phone);
+  const status = webPlayAccessByMobile.get(phone);
+  if (status === "error") return `<span class="status webplay-access-unavailable">Unavailable</span>`;
+  if (status === null || status === undefined) {
+    return `<span class="status pending">Checking</span>`;
+  }
+  const enabled = status === true;
+  const pending = webPlayAccessPending.has(phone);
+  return `<div class="webplay-access-cell"><span class="status ${enabled ? "webplay-access-approved" : "webplay-access-disapproved"}">${enabled ? "Approved" : "Disapproved"}</span><button class="button small ${enabled ? "danger" : "success"}" data-action="set-player-webplay" data-mobile="${escapeHtml(phone)}" data-enabled="${enabled ? "false" : "true"}" ${pending ? "disabled" : ""}>${pending ? "Saving…" : enabled ? "Disapprove" : "Approve"}</button></div>`;
+}
+
+function watchGlobalWebPlayAccess() {
+  if (globalWebPlayAccessRef) globalWebPlayAccessRef.off();
+  globalWebPlayAccessEnabled = null;
+  globalWebPlayAccessError = "";
+  const db = getPushHubDb();
+  if (!db) throw new Error("The a2moring Firebase database is unavailable.");
+  globalWebPlayAccessRef = db.ref("Admin/WV2");
+  globalWebPlayAccessRef.on("value", (snapshot) => {
+    globalWebPlayAccessEnabled = isTruthySetting(snapshot.val());
+    globalWebPlayAccessError = "";
+    if (currentPage === "settings") render(true);
+  }, (error) => {
+    globalWebPlayAccessEnabled = null;
+    globalWebPlayAccessError = error.message || "Firebase read was denied.";
+    toast(`Could not read global WebPlay access: ${globalWebPlayAccessError}`, true);
+    if (currentPage === "settings") render(true);
+  });
+}
+
+async function setPlayerWebPlayAccess(mobile, enabled) {
+  const phone = String(mobile || "").replace(/\D/g, "");
+  if (!/^\d{10,}$/.test(phone) || webPlayAccessPending.has(phone)) return;
+  webPlayAccessPending.add(phone);
+  render(true);
+  try {
+    const db = getPushHubDb();
+    if (!db) throw new Error("The a2moring Firebase database is unavailable.");
+    await db.ref(`DATA/${phone}/WV`).set(enabled);
+    webPlayAccessByMobile.set(phone, enabled);
+    toast(`WebPlay ${enabled ? "approved" : "disapproved"} for ${phone}.`);
+  } catch (error) {
+    toast(`Could not update WebPlay access for ${phone}: ${error.message}`, true);
+  } finally {
+    webPlayAccessPending.delete(phone);
+    render(true);
+  }
+}
+
+async function setGlobalWebPlayAccess(enabled) {
+  if (globalWebPlayAccessPending) return;
+  globalWebPlayAccessPending = true;
+  render(true);
+  try {
+    const db = getPushHubDb();
+    if (!db) throw new Error("The a2moring Firebase database is unavailable.");
+    await db.ref("Admin/WV2").set(enabled);
+    globalWebPlayAccessEnabled = enabled;
+    globalWebPlayAccessError = "";
+    toast(`Global WebPlay access ${enabled ? "enabled" : "disabled"}.`);
+  } catch (error) {
+    toast(`Could not update global WebPlay access: ${error.message}`, true);
+  } finally {
+    globalWebPlayAccessPending = false;
+    render(true);
+  }
 }
 
 function mergeLiveData(root) {
@@ -1029,9 +1266,6 @@ function mergeLiveData(root) {
       merged.settings[key] = value;
     }
   }
-  if (/^https:\/\/mama567\.bond\/result\.html\/?$/i.test(String(merged.settings.resultChartUrl || "").trim())) {
-    merged.settings.resultChartUrl = DEFAULT_RESULT_CHART_URL;
-  }
   return normalizeData(merged);
 }
 
@@ -1048,9 +1282,18 @@ let adminCredentialRef;
 let adminCredentialFingerprint = "";
 let adminAuthenticated = false;
 let loginInProgress = false;
+let globalWebPlayAccessEnabled = null;
+let globalWebPlayAccessError = "";
+let globalWebPlayAccessPending = false;
+let globalWebPlayAccessRef;
+const webPlayAccessByMobile = new Map();
+const webPlayAccessListeners = new Map();
+const webPlayAccessPending = new Set();
 let currentPage = "dashboard";
 let requestFilter = "All";
+let requestDateSelection = localDateKey();
 const requestsInProgress = new Set();
+const playerDeletionsInProgress = new Set();
 let playerQuery = "";
 let playerStatusFilter = "All";
 let transactionQuery = "";
@@ -1089,25 +1332,6 @@ async function adminPasswordFingerprint(value) {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function appsScriptEndpointFromWebId(value) {
-  const webId = normalizedAdminPassword(value).trim();
-  if (!webId) return "";
-  if (/^https:\/\//i.test(webId)) {
-    try {
-      const url = new URL(webId);
-      return url.protocol === "https:" && url.hostname === "script.google.com"
-        && /^\/macros\/s\/[^/]+\/exec$/.test(url.pathname) && !url.search && !url.hash
-        ? url.href
-        : "";
-    } catch {
-      return "";
-    }
-  }
-  return /^[A-Za-z0-9_-]+$/.test(webId)
-    ? `https://script.google.com/macros/s/${webId}/exec`
-    : "";
-}
-
 async function verifyAdminLogin(phone, password) {
   if (typeof firebase === "undefined") throw new Error("Sign-in is temporarily unavailable. Check your connection and try again.");
   if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -1125,14 +1349,13 @@ async function verifyAdminLogin(phone, password) {
     throw new Error("Phone number or password is incorrect.");
   }
   return {
-    endpoint: appsScriptEndpointFromWebId(credentials.webid),
-    token: normalizedAdminPassword(credentials.tokenid).trim(),
     credentialFingerprint: await adminPasswordFingerprint(expectedPassword),
   };
 }
 
 function setAdminAppVisible(visible) {
   adminAuthenticated = visible;
+  document.getElementById("admin-session-check").hidden = true;
   document.getElementById("admin-login").hidden = visible;
   document.getElementById("admin-app").hidden = !visible;
 }
@@ -1159,9 +1382,19 @@ function monitorAdminPassword(fingerprint) {
 }
 
 function signOutAdmin(message = "") {
+  if (adminAuthenticated) closeBroadcastSession();
   if (adminCredentialRef) adminCredentialRef.off();
   adminCredentialRef = undefined;
   adminCredentialFingerprint = "";
+  if (globalWebPlayAccessRef) globalWebPlayAccessRef.off();
+  globalWebPlayAccessRef = undefined;
+  for (const ref of webPlayAccessListeners.values()) ref.off();
+  webPlayAccessListeners.clear();
+  webPlayAccessByMobile.clear();
+  webPlayAccessPending.clear();
+  globalWebPlayAccessEnabled = null;
+  globalWebPlayAccessError = "";
+  globalWebPlayAccessPending = false;
   if (databaseRootRef) databaseRootRef.off();
   databaseRef = undefined;
   databaseRootRef = undefined;
@@ -1219,12 +1452,21 @@ function legacyUpdatesFor(changed, previous) {
     ["closeBets", "EnableCloseBets"],
     ["signUpBonus", "Sign Up Bonus"],
     ["minimumDeposit", "MD"],
+    ["qrCodeEnabled", "QrCodeEnabled"],
+    ["directPaymentEnabled", "DirectPaymentEnabled"],
+    ["paymentGatewayEnabled", "PaymentGatewayEnabled"],
+    ["qrCode", "Qr Code"],
+    ["upiId", "upi_id"],
+    ["upiUrlTemplate", "Admin Upi"],
+    ["paymentGatewayUrl", "payment_api_url"],
     ["minimumWithdrawal", "MW"],
     ["minimumEntry", "Min Entry"],
     ["maximumEntry", "Max Entry"],
     ["withdrawTiming", "Withdraw Timing"],
     ["policy", "Policy"],
     ["websiteUrl", "Website"],
+    ["matka60Url", "matka60url"],
+    ["matka30Url", "matka30url"],
     ["contactUrl", "Contact"],
     ["telegramUrl", "Telegram"],
     ["resultChartUrl", "Market_Reult_chart_Web"],
@@ -1241,6 +1483,7 @@ function legacyUpdatesFor(changed, previous) {
   }
   if (Array.isArray(changed.players)) {
     const previousPlayers = new Map((previous.players || []).map((player) => [player.id, player]));
+    const currentPlayers = new Map(changed.players.map((player) => [player.id, player]));
     for (const player of changed.players) {
       const oldPlayer = previousPlayers.get(player.id);
       if (!oldPlayer || !/^\d{10,}$/.test(player.mobile)) continue;
@@ -1255,6 +1498,11 @@ function legacyUpdatesFor(changed, previous) {
         updates[`DATA/${player.mobile}/blocked`] = blocked ? "yes" : "no";
         updates[`Blocked/${player.mobile}`] = blocked ? true : null;
       }
+    }
+    for (const oldPlayer of previous.players || []) {
+      if (currentPlayers.has(oldPlayer.id) || !/^\d{10,}$/.test(String(oldPlayer.mobile || ""))) continue;
+      updates[`DATA/${oldPlayer.mobile}`] = null;
+      updates[`Blocked/${oldPlayer.mobile}`] = null;
     }
     if (Array.isArray(changed.transactions)) {
       const previousTransactionIds = new Set((previous.transactions || []).map(transaction => transaction.id));
@@ -1299,7 +1547,11 @@ function legacyUpdatesFor(changed, previous) {
       fields[5] = market.status === "Open" ? "Running" : "Stop";
       if (market.result && market.result !== "—") fields[6] = market.result;
       fields[7] = String(market.position);
-      fields[8] = JSON.stringify({ id: market.id, days: normalizedMarketDays(market.days) });
+      fields[8] = JSON.stringify({
+        id: market.id,
+        days: normalizedMarketDays(market.days),
+        resultDate: market.resultDate || "",
+      });
       for (const [source, key] of Object.entries(entries)) {
         updates[`${source}/${key}`] = JSON.stringify(fields);
       }
@@ -1370,6 +1622,18 @@ function money(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+function updateTopbarTotals() {
+  const root = document.getElementById("topbar-totals");
+  if (!root) return;
+  const today = localDateKey();
+  const played = data.bets
+    .filter((bet) => resultDateForBid(bet) === today)
+    .reduce((sum, bet) => sum + (Number(bet.points) || 0), 0);
+  const won = allPublishedWinners(today)
+    .reduce((sum, winner) => sum + winner.winningAmount, 0);
+  root.innerHTML = `<div class="topbar-total played"><span>Played today</span><strong>${money(played)}</strong></div><div class="topbar-total won"><span>Won today</span><strong>${money(won)}</strong></div>`;
+}
+
 function dateLabel(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -1419,13 +1683,19 @@ function statusTag(value) {
   return `<span class="status ${escapeHtml(value.toLowerCase())}">${escapeHtml(value)}</span>`;
 }
 
-function marketRows(markets = data.markets.slice(0, 5)) {
+function marketRows(markets = data.markets.slice(0, 5), date = localDateKey()) {
   if (!markets.length) return `<div class="empty-state">No markets have been added yet.</div>`;
-  return markets.map((market) => `<div class="market-row"><span class="market-mark">${escapeHtml(market.name.slice(0, 2).toUpperCase())}</span><div class="market-info"><strong>${escapeHtml(market.name)}</strong><small>${escapeHtml(market.type)} · ${escapeHtml(market.open)} — ${escapeHtml(market.close)}</small></div>${statusTag(market.status)}<span class="market-result">${escapeHtml(market.result || "—")}</span></div>`).join("");
+  return markets.map((market) => {
+    const results = marketResultsForDate(market, date).filter((item) => item.result);
+    const result = results.length
+      ? results.map((item) => `${item.session ? `${item.session}: ` : ""}${item.result}`).join(" · ")
+      : "—";
+    return `<div class="market-row"><span class="market-mark">${escapeHtml(market.name.slice(0, 2).toUpperCase())}</span><div class="market-info"><strong>${escapeHtml(market.name)}</strong><small>${escapeHtml(market.type)} · ${escapeHtml(market.open)} — ${escapeHtml(market.close)}</small></div>${statusTag(market.status)}<span class="market-result">${escapeHtml(result)}</span></div>`;
+  }).join("");
 }
 
-function activityRows() {
-  return data.transactions.slice(0, 5).map((transaction) => {
+function activityRows(date) {
+  return data.transactions.filter((item) => transactionDateKey(item) === date).slice(0, 5).map((transaction) => {
     const positive = transaction.amount >= 0;
     const symbol = transaction.type === "Added" ? "+" : transaction.type === "Winning" ? "★" : "↗";
     const amount = transaction.amountUnavailable ? "—" : `${positive ? "+" : ""}${money(transaction.amount)}`;
@@ -1433,31 +1703,125 @@ function activityRows() {
   }).join("") || `<div class="empty-state">No recent activity.</div>`;
 }
 
+function reportDateFilter() {
+  const date = resultDateSelection || localDateKey();
+  return `<section class="panel date-filter-panel"><div class="form-field"><label for="activity-date">Show data for date</label><input id="activity-date" class="field" type="date" value="${escapeHtml(date)}" max="${escapeHtml(localDateKey())}"></div></section>`;
+}
+
+function transactionDateKey(item) {
+  const raw = String(item.date || item.createdAt || "");
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const legacy = raw.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if (legacy) return `${legacy[3]}-${legacy[2]}-${legacy[1]}`;
+  const localized = raw.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{4})/);
+  if (localized) {
+    const first = Number(localized[1]);
+    const second = Number(localized[2]);
+    const day = first > 12 ? first : second > 12 ? second : first;
+    const month = first > 12 ? second : second > 12 ? first : second;
+    return `${localized[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? "" : localDateKey(new Date(parsed));
+}
+
+function requestDateKey(request) {
+  return transactionDateKey({ date: request.created || request.date || request.createdAt || "" });
+}
+
+function recordManualWalletAdjustment(player, type, amount, note) {
+  const timestamp = Date.now();
+  const idSuffix = `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+  const created = new Date(timestamp).toLocaleString();
+  const isDeposit = type === "Added";
+  const kind = isDeposit ? "Deposit" : "Withdrawal";
+  const details = String(note || (isDeposit ? "Admin entry" : "Admin wallet adjustment")).trim();
+  const signedAmount = isDeposit ? amount : -amount;
+
+  if (isDeposit) {
+    void notifyUserByPhone(
+      player.mobile,
+      `Amount Credit ${money(amount)} by Sridevi Matka`,
+      details || `Wallet credited ${money(amount)}.`
+    ).catch(err => console.warn("Credit push failed", err));
+  }
+
+  data.transactions.unshift({
+    id: `T-${idSuffix}`,
+    player: player.name,
+    mobile: player.mobile,
+    type,
+    amount: signedAmount,
+    date: created,
+    note: details,
+  });
+  data.requests.unshift({
+    id: `MANUAL-${idSuffix}`,
+    player: player.name,
+    mobile: player.mobile,
+    kind,
+    amount,
+    method: "Admin wallet adjustment",
+    details,
+    created,
+    status: "Approved",
+    balanceDeducted: !isDeposit,
+    source: "manual",
+  });
+}
+
+function requestDateFilter() {
+  const date = requestDateSelection || localDateKey();
+  return `<section class="panel date-filter-panel"><div class="form-field"><label for="request-date">Show ${escapeHtml(date)} requests</label><input id="request-date" class="field" type="date" value="${escapeHtml(date)}" max="${escapeHtml(localDateKey())}"></div></section>`;
+}
+
 function dashboardPage() {
   const balance = data.players.reduce((sum, player) => sum + Number(player.balance || 0), 0);
-  const added = data.transactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0);
-  const withdrawn = Math.abs(data.transactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
+  const totalCredits = data.players.reduce((sum, player) => sum + Number(player.totalAdded || 0), 0);
+  const totalDemoCredits = data.transactions
+    .filter((item) => item.demo === true)
+    .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const totalPlayed = data.bets.reduce((sum, bet) => sum + (Number(bet.points) || 0), 0);
+  const totalDistributed = data.settlements.reduce((sum, settlement) => sum + (Number(settlement.total) || 0), 0);
+  const zeroBalancePlayers = data.players.filter((player) => Number(player.balance || 0) === 0).length;
+  const nonzeroBalancePlayers = data.players.length - zeroBalancePlayers;
   const waiting = pendingRequests();
   const active = data.players.filter((player) => player.status === "Active").length;
-  const today = localDateKey();
-  const todayBets = data.bets.filter((bet) => resultDateForBid(bet) === today);
-  const playedToday = todayBets.reduce((sum, bet) => sum + (Number(bet.points) || 0), 0);
-  const winners = allPublishedWinners();
+  const date = resultDateSelection || localDateKey();
+  const dateBets = data.bets.filter((bet) => resultDateForBid(bet) === date);
+  const playedToday = dateBets.reduce((sum, bet) => sum + (Number(bet.points) || 0), 0);
+  const dateTransactions = data.transactions.filter((item) => transactionDateKey(item) === date);
+  const dailyDemoTransactions = dateTransactions.filter((item) => item.demo === true);
+  const dailyDemoCredits = dailyDemoTransactions.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const winners = allPublishedWinners().filter((winner) => winner.date === date);
   const winningAmount = winners.reduce((sum, winner) => sum + winner.winningAmount, 0);
-  return `${pageHeading("Dashboard", "Your A2 MORNING operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
+  return `${pageHeading("Dashboard", "Your Sridevi Matka operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
+    ${reportDateFilter()}
+    <section class="panel wallet-overview"><div class="panel-head"><div><h2>Wallet &amp; player balance overview</h2><p>Current wallet funds, total activity, and account counts</p></div></div><div class="grid three-col">
+      <div class="metric-mini"><span>Total wallet remaining</span><strong>${money(balance)}</strong></div>
+      <div class="metric-mini"><span>Total wallet credits added</span><strong>${money(totalCredits)}</strong></div>
+      <div class="metric-mini"><span>Total DEMO test amounts · separate</span><strong>${money(totalDemoCredits)}</strong></div>
+      <div class="metric-mini"><span>Total amount played</span><strong>${money(totalPlayed)}</strong></div>
+      <div class="metric-mini"><span>Winnings distributed</span><strong>${money(totalDistributed)}</strong></div>
+      <div class="metric-mini"><span>Users with zero balance</span><strong>${zeroBalancePlayers}</strong></div>
+      <div class="metric-mini"><span>Users with balance</span><strong>${nonzeroBalancePlayers}</strong></div>
+      <div class="metric-mini"><span>Total users</span><strong>${data.players.length}</strong></div>
+    </div></section>
     <div class="grid stats-grid">
       <article class="stat-card"><div class="stat-top"><span>Total players</span><span class="stat-icon">♙</span></div><div class="stat-value">${data.players.length}</div><div class="stat-foot"><span class="up">${active} active</span> · ${data.players.length - active} blocked</div></article>
       <article class="stat-card"><div class="stat-top"><span>Today's logins</span><span class="stat-icon">↗</span></div><div class="stat-value">${todayLoginCount}</div><div class="stat-foot">New users · <button class="panel-link" data-page="new-users">View users →</button></div></article>
       <article class="stat-card"><div class="stat-top"><span>Wallet balances</span><span class="stat-icon">₹</span></div><div class="stat-value">${money(balance)}</div><div class="stat-foot">Across all player accounts</div></article>
       <article class="stat-card"><div class="stat-top"><span>Pending requests</span><span class="stat-icon">⇄</span></div><div class="stat-value">${waiting}</div><div class="stat-foot">${waiting ? "Needs your review" : "All requests reviewed"}</div></article>
-      <article class="stat-card"><div class="stat-top"><span>Total added</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(added)}</div><div class="stat-foot">${data.transactions.filter((item) => item.type === "Added" && item.date.startsWith(today)).length} credits today</div></article>
-      <article class="stat-card"><div class="stat-top"><span>Total withdrawn</span><span class="stat-icon">↘</span></div><div class="stat-value">${money(withdrawn)}</div><div class="stat-foot">Completed wallet withdrawals</div></article>
-      <article class="stat-card"><div class="stat-top"><span>Today played amount</span><span class="stat-icon">▦</span></div><div class="stat-value">${money(playedToday)}</div><div class="stat-foot">${todayBets.length} bid${todayBets.length === 1 ? "" : "s"} today · <button class="panel-link" data-page="played">View bids →</button></div></article>
-      <article class="stat-card"><div class="stat-top"><span>Total winning amount</span><span class="stat-icon">★</span></div><div class="stat-value">${money(winningAmount)}</div><div class="stat-foot">${winners.length} winning bid${winners.length === 1 ? "" : "s"} · <button class="panel-link" data-page="winners">View winners →</button></div></article>
+      <article class="stat-card"><div class="stat-top"><span>Points added · ${escapeHtml(date)}</span><span class="stat-icon">↗</span></div><div class="stat-value">${money(dateTransactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0))}</div><div class="stat-foot">${dateTransactions.filter((item) => item.type === "Added").length} credits on selected date</div></article>
+      <article class="stat-card"><div class="stat-top"><span>DEMO test amount · ${escapeHtml(date)}</span><span class="stat-icon">TEST</span></div><div class="stat-value">${money(dailyDemoCredits)}</div><div class="stat-foot">${dailyDemoTransactions.length} demo test${dailyDemoTransactions.length === 1 ? "" : "s"} · not real wallet credits</div></article>
+      <article class="stat-card"><div class="stat-top"><span>Points withdrawn · ${escapeHtml(date)}</span><span class="stat-icon">↘</span></div><div class="stat-value">${money(Math.abs(dateTransactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0)))}</div><div class="stat-foot">Wallet withdrawals on selected date</div></article>
+      <article class="stat-card"><div class="stat-top"><span>Played amount · ${escapeHtml(date)}</span><span class="stat-icon">▦</span></div><div class="stat-value">${money(playedToday)}</div><div class="stat-foot">${dateBets.length} bid${dateBets.length === 1 ? "" : "s"} on selected date · <button class="panel-link" data-page="played">View bids →</button></div></article>
+      <article class="stat-card"><div class="stat-top"><span>Winning amount · ${escapeHtml(date)}</span><span class="stat-icon">★</span></div><div class="stat-value">${money(winningAmount)}</div><div class="stat-foot">${winners.length} winning bid${winners.length === 1 ? "" : "s"} · <button class="panel-link" data-page="winners">View winners →</button></div></article>
     </div>
     <div class="grid overview-grid">
-      <section class="panel"><div class="panel-head"><div><h2>Market overview</h2><p>Current market status and latest results</p></div><button class="panel-link" data-page="markets">View all markets →</button></div><div class="market-list">${marketRows()}</div></section>
-      <section class="panel"><div class="panel-head"><div><h2>Recent activity</h2><p>Latest wallet and game activity</p></div><button class="panel-link" data-page="transactions">All activity →</button></div><div class="activity-list">${activityRows()}</div></section>
+      <section class="panel"><div class="panel-head"><div><h2>Market overview</h2><p>Market status and results for ${escapeHtml(date)}</p></div><button class="panel-link" data-page="markets">View all markets →</button></div><div class="market-list">${marketRows(data.markets.slice(0, 5), date)}</div></section>
+      <section class="panel"><div class="panel-head"><div><h2>Wallet activity · ${escapeHtml(date)}</h2><p>Credits and withdrawals on the selected date</p></div><button class="panel-link" data-page="transactions">All activity →</button></div><div class="activity-list">${activityRows(date)}</div></section>
     </div>
     <section class="quick-section"><div class="section-heading"><h2>Quick access</h2><span>Manage your admin tools</span></div><div class="grid quick-grid">
       ${iconCard("players", "Players", "Search & manage", "players")}
@@ -1479,18 +1843,25 @@ function dashboardPage() {
 
 function playerTable(rows) {
   if (!rows.length) return `<div class="empty-state">No players match your search.</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>Balance</th><th>Added</th><th>Withdrawn</th><th>Played</th><th>Joined</th><th>Last seen</th><th>Status</th><th>Game access</th><th>Actions</th></tr></thead><tbody>${rows.map((player) => `<tr>
+  return `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>Balance</th><th>Added</th><th>Withdrawn</th><th>Played</th><th>Joined</th><th>Last seen</th><th>Status</th><th>Game access</th><th>WebPlay access</th><th>Actions</th></tr></thead><tbody>${rows.map((player) => `<tr>
     <td><div class="table-primary"><span class="user-avatar">${escapeHtml(player.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase())}</span><span><strong>${escapeHtml(player.name)}</strong><small>${player.approved ? "Approved account" : "Awaiting approval"}</small></span></div></td>
-    <td>${escapeHtml(player.mobile)}</td><td><strong>${money(player.balance)}</strong></td><td>${money(player.totalAdded)}</td><td>${money(player.totalWithdrawn)}</td><td>${money(player.played)}</td><td>${dateLabel(player.joined)}</td><td>${escapeHtml(lastSeenLabel(player.mobile))}</td><td>${statusTag(player.status)}</td><td>${gameAccessLabel(player.mobile)}</td>
-    <td><div class="actions-cell">${whatsappLink(player.mobile)}<button class="button small" data-action="edit-player" data-id="${escapeHtml(player.id)}" title="Edit player">Edit</button><button class="button small" data-action="player-credit" data-id="${escapeHtml(player.id)}" title="Add or withdraw points">₹</button><button class="button small ${player.status === "Blocked" ? "success" : "danger"}" data-action="toggle-player" data-id="${escapeHtml(player.id)}">${player.status === "Blocked" ? "Unblock" : "Block"}</button></div></td>
+    <td>${escapeHtml(player.mobile)}</td><td><strong>${money(player.balance)}</strong></td><td>${money(player.totalAdded)}</td><td>${money(player.totalWithdrawn)}</td><td>${money(player.played)}</td><td>${dateLabel(player.joined)}</td><td>${escapeHtml(lastSeenLabel(player.mobile))}</td><td>${statusTag(player.status)}</td><td>${gameAccessLabel(player.mobile)}</td><td>${webPlayAccessControl(player.mobile)}</td>
+    <td><div class="actions-cell">${whatsappLink(player.mobile)}<button class="button small" data-action="edit-player" data-id="${escapeHtml(player.id)}" title="Edit player">Edit</button><button class="button small" data-action="player-credit" data-id="${escapeHtml(player.id)}" title="Add or withdraw points">₹</button><button class="button small ${player.status === "Blocked" ? "success" : "danger"}" data-action="toggle-player" data-id="${escapeHtml(player.id)}">${player.status === "Blocked" ? "Unblock" : "Block"}</button><button class="button small danger" data-action="delete-player" data-id="${escapeHtml(player.id)}" title="Delete player account">Delete</button></div></td>
   </tr>`).join("")}</tbody></table></div>`;
 }
 
 function playersPage() {
   const rows = data.players
     .filter((player) => `${player.name} ${player.mobile}`.toLowerCase().includes(playerQuery.toLowerCase()))
-    .filter((player) => playerStatusFilter === "All" || (playerStatusFilter === "Pending" ? !player.approved : player.status === playerStatusFilter));
-  return `${pageHeading("Players", "Manage player accounts, balances, approvals, and access.", button("＋ Add player", "add-player", "primary"))}
+    .filter((player) => playerStatusFilter === "All" || (playerStatusFilter === "Pending" ? !player.approved : player.status === playerStatusFilter))
+    .sort((left, right) => {
+      const leftSeen = lastSeenTimestamp(left.mobile);
+      const rightSeen = lastSeenTimestamp(right.mobile);
+      if (leftSeen === null) return rightSeen === null ? 0 : 1;
+      if (rightSeen === null) return -1;
+      return rightSeen - leftSeen;
+    });
+  return `${pageHeading("Players", "Players are ordered by most recent last seen. Manage accounts, balances, approvals, and access.", button("＋ Add player", "add-player", "primary"))}
     <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="player-search" class="field" type="search" placeholder="Search by name or mobile number..." value="${escapeHtml(playerQuery)}"></div><select id="player-status-filter" class="select"><option value="All">All statuses</option><option value="Active">Active</option><option value="Blocked">Blocked</option><option value="Pending">Needs approval</option></select><span class="stat-foot">${rows.length} player${rows.length === 1 ? "" : "s"}</span></div>${playerTable(rows)}</section>`;
 }
 
@@ -1503,69 +1874,94 @@ function newUsersPage() {
     const mobile = player?.mobile || (/^\d{10,}$/.test(tag) ? tag : valueMobile);
     const displayName = player?.name
       || (typeof value === "string" && value.trim() && !/^\d{10,}$/.test(value) ? value : tag);
-    return `<tr><td><strong>${escapeHtml(displayName)}</strong></td><td>${escapeHtml(mobile || "—")}</td><td><code>${escapeHtml(tag)}</code></td><td>${escapeHtml(lastSeenLabel(mobile))}</td><td>${gameAccessLabel(mobile)}</td><td>${whatsappLink(mobile) || "—"}</td></tr>`;
+    return `<tr><td><strong>${escapeHtml(displayName)}</strong></td><td>${escapeHtml(mobile || "—")}</td><td><code>${escapeHtml(tag)}</code></td><td>${escapeHtml(lastSeenLabel(mobile))}</td><td>${gameAccessLabel(mobile)}</td><td>${webPlayAccessControl(mobile)}</td><td>${whatsappLink(mobile) || "—"}</td></tr>`;
   }).join("");
   return `${pageHeading("Today's new users", `Users who joined on ${dateKey}.`)}
     <section class="panel"><div class="panel-head"><div><h2>Today’s logins</h2></div><span class="status active">${todayNewUsers.length} user${todayNewUsers.length === 1 ? "" : "s"}</span></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>User tag</th><th>Last seen</th><th>Game access</th><th>Contact</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No users have been recorded for ${dateKey} yet.</div>`}
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>User tag</th><th>Last seen</th><th>Game access</th><th>WebPlay access</th><th>Contact</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No users have been recorded for ${dateKey} yet.</div>`}
     </section>`;
 }
 
 function requestsPage() {
   const rows = data.requests.filter((request) => (requestFilter === "All" || request.status === requestFilter) && `${request.player} ${request.mobile} ${request.kind} ${request.method} ${request.details || ""}`.toLowerCase().includes(requestQuery.toLowerCase()));
   return `${pageHeading("Payment requests", "Withdrawal points are reserved when submitted. Refund restores them; Delete removes the request without refunding.", button("＋ Record payment", "manual-payment", "primary"))}
-    <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="request-search" class="field" type="search" placeholder="Search player, mobile, or method..." value="${escapeHtml(requestQuery)}"></div><select id="request-filter" class="select">${["All", "Pending", "Approved", "Refunded", "Rejected", "Deleted"].map((value) => `<option${requestFilter === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="stat-foot">${rows.length} request${rows.length === 1 ? "" : "s"}</span></div>
-    ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Last seen</th><th>Request</th><th>Amount</th><th>Method &amp; details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map((request) => `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0])}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile)}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td>${escapeHtml(request.kind)}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created)}</td><td>${statusTag(request.status)}</td><td>${request.status === "Pending" ? `<div class="actions-cell"><button class="button small success" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Approved" ${request.amountUnavailable ? "disabled title=\"Legacy request amount is not mapped\"" : ""}>Approve</button>${request.kind === "Withdrawal" ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${request.amountUnavailable || (request.balanceDeducted && !data.players.some((player) => player.mobile === request.mobile)) ? "disabled title=\"Player or refund amount is unavailable\"" : ""}>Refund</button>` : `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Rejected">Reject</button>`}<button class="button small" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Deleted">Delete</button></div>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No requests match this filter.</div>`}</section>`;
+    <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="request-search" class="field" type="search" placeholder="Search player, mobile, or method..." value="${escapeHtml(requestQuery)}"></div><select id="request-filter" class="select">${["All", "Pending", "Approved", "Refunded", "Rejected", "Failed", "Cancelled", "Deleted"].map((value) => `<option${requestFilter === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="stat-foot">${rows.length} request${rows.length === 1 ? "" : "s"}</span></div>
+    ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Last seen</th><th>Request</th><th>Amount</th><th>Method &amp; details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows.map((request) => `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0])}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile)}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td>${escapeHtml(request.kind)}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created)}</td><td>${statusTag(request.status)}</td><td>${request.status === "Pending" ? `<div class="actions-cell"><button class="button small success" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Approved" ${request.amountUnavailable ? "disabled title=\"Legacy request amount is not mapped\"" : ""}>Approve</button>${request.kind === "Withdrawal" ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${request.amountUnavailable || (request.balanceDeducted && !data.players.some((player) => player.mobile === request.mobile)) ? "disabled title=\"Player or refund amount is unavailable\"" : ""}>Refund</button><button class="button small" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Cancelled" ${request.amountUnavailable || (request.balanceDeducted && !data.players.some((player) => player.mobile === request.mobile)) ? "disabled title=\"Player or reserved balance is unavailable\"" : ""}>Cancel request</button>` : `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Rejected">Reject</button>`}<button class="button small" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Deleted">Delete</button></div>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No requests match this filter.</div>`}</section>`;
 }
 
 function requestKindPage(kind) {
   const label = kind === "Deposit" ? "Deposit" : "Withdrawal";
+  const date = requestDateSelection || localDateKey();
+  const matchesSearch = (request) => `${request.player} ${request.mobile} ${request.method} ${request.details || ""}`.toLowerCase().includes(requestQuery.toLowerCase());
+  const pending = data.requests
+    .filter(request => request.kind === kind && request.status === "Pending")
+    .filter(matchesSearch)
+    .sort((left, right) => requestDateKey(right).localeCompare(requestDateKey(left)));
   const rows = data.requests
-    .filter(request => request.kind === kind)
+    .filter(request => request.kind === kind && request.status !== "Pending")
+    .filter(request => requestDateKey(request) === date)
     .filter(request => requestFilter === "All" || request.status === requestFilter)
-    .filter(request => `${request.player} ${request.mobile} ${request.method} ${request.details || ""}`.toLowerCase().includes(requestQuery.toLowerCase()));
+    .filter(matchesSearch);
   const subtitle = kind === "Deposit"
     ? "Review UPI payments and approve verified requests to credit points."
     : "Review withdrawal requests. Submitted withdrawals reserve points; refunds restore them.";
-  const rowsMarkup = rows.map(request => {
+  const rowsMarkup = (items) => items.map(request => {
     const busy = requestsInProgress.has(request.id);
     const approval = kind === "Deposit" ? "Approve & credit" : "Approve";
     const controls = request.status !== "Pending" ? "—" : `<div class="actions-cell">
       <button class="button small success" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Approved" ${busy || request.amountUnavailable ? "disabled" : ""}>${busy ? "Processing…" : approval}</button>
       ${kind === "Withdrawal"
-        ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${busy || request.amountUnavailable || (request.balanceDeducted && !data.players.some(player => player.mobile === request.mobile)) ? "disabled" : ""}>Refund</button>`
+        ? `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Refunded" ${busy || request.amountUnavailable || (request.balanceDeducted && !data.players.some(player => player.mobile === request.mobile)) ? "disabled" : ""}>Refund</button><button class="button small" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Cancelled" ${busy || request.amountUnavailable || (request.balanceDeducted && !data.players.some(player => player.mobile === request.mobile)) ? "disabled" : ""}>Cancel request</button>`
         : `<button class="button small danger" data-action="resolve-request" data-id="${escapeHtml(request.id)}" data-status="Rejected" ${busy ? "disabled" : ""}>Reject</button>`}
     </div>`;
-    return `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0] || "?")}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile || "—")}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created)}</td><td>${statusTag(request.status)}</td><td>${controls}</td></tr>`;
+    return `<tr><td><div class="table-primary"><span class="user-avatar">${escapeHtml(request.player[0] || "?")}</span><span><strong>${escapeHtml(request.player)}</strong><small>${escapeHtml(request.mobile || "—")}</small></span></div></td><td>${escapeHtml(lastSeenLabel(request.mobile))}</td><td><strong>${request.amountUnavailable ? "—" : money(request.amount)}</strong></td><td>${escapeHtml(request.method)}${request.details ? `<small style="display:block;max-width:280px;white-space:normal;color:#687589;margin-top:3px">${escapeHtml(request.details)}</small>` : ""}</td><td>${escapeHtml(request.created || "—")}</td><td>${statusTag(request.status)}</td><td>${controls}</td></tr>`;
   }).join("");
+  const headers = `<thead><tr><th>Player</th><th>Last seen</th><th>Amount</th><th>Payment details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>`;
+  const pendingTotal = pending.reduce((sum, request) => sum + (Number(request.amount) || 0), 0);
+  const demoDeposits = kind === "Deposit"
+    ? data.transactions.filter(item => item.demo === true
+      && transactionDateKey(item) === date
+      && `${item.player} ${item.mobile} ${item.id} ${item.note}`.toLowerCase().includes(requestQuery.toLowerCase()))
+    : [];
+  const demoDepositTotal = demoDeposits.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const demoDepositRows = demoDeposits.map(item => `<tr><td><div class="table-primary"><span class="user-avatar">D</span><span><strong>${escapeHtml(item.player || "Player")}</strong><small>${escapeHtml(item.mobile || "—")}</small></span></div></td><td><strong>${money(item.amount)}</strong></td><td><code>${escapeHtml(item.id)}</code></td><td>${escapeHtml(item.date || "—")}</td><td>${statusTag("DEMO ONLY")}</td></tr>`).join("");
   return `${pageHeading(`${label} requests`, subtitle, button("＋ Add points manually", "manual-payment", "primary"))}
-    <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="request-search" class="field" type="search" placeholder="Search player, mobile, or payment details..." value="${escapeHtml(requestQuery)}"></div><select id="request-filter" class="select">${["All", "Pending", "Approved", "Refunded", "Rejected", "Deleted"].map(value => `<option${value === requestFilter ? " selected" : ""}>${value}</option>`).join("")}</select><span class="stat-foot">${rows.length} ${label.toLowerCase()} request${rows.length === 1 ? "" : "s"}</span></div>
-    ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Last seen</th><th>Amount</th><th>Payment details</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead><tbody>${rowsMarkup}</tbody></table></div>` : `<div class="empty-state">No ${label.toLowerCase()} requests match this filter.</div>`}</section>`;
+    ${requestDateFilter()}
+    <section class="panel pending-request-panel"><div class="panel-head"><div><h2>Pending ${label.toLowerCase()} requests · all dates</h2><p>Unapproved requests remain visible here regardless of the selected date.</p></div><strong>${pending.length} pending · ${money(pendingTotal)}</strong></div>
+    ${pending.length ? `<div class="table-wrap"><table>${headers}<tbody>${rowsMarkup(pending)}</tbody></table></div>` : `<div class="empty-state">No pending ${label.toLowerCase()} requests.</div>`}</section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>${label} history · ${escapeHtml(date)}</h2><p>Completed requests for the selected date.</p></div></div><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="request-search" class="field" type="search" placeholder="Search player, mobile, or payment details..." value="${escapeHtml(requestQuery)}"></div><select id="request-filter" class="select">${["All", "Pending", "Approved", "Refunded", "Rejected", "Failed", "Cancelled", "Deleted"].map(value => `<option${value === requestFilter ? " selected" : ""}>${value}</option>`).join("")}</select><span class="stat-foot">${rows.length} ${label.toLowerCase()} request${rows.length === 1 ? "" : "s"}</span></div>
+    ${rows.length ? `<div class="table-wrap"><table>${headers}<tbody>${rowsMarkup(rows)}</tbody></table></div>` : `<div class="empty-state">No completed ${label.toLowerCase()} requests match ${escapeHtml(date)}.</div>`}</section>
+    ${kind === "Deposit" ? `<section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>DEMO deposit test history · ${escapeHtml(date)}</h2><p>Separate test records only. They do not represent approved deposits or real wallet credits.</p></div><strong>${demoDeposits.length} tests · ${money(demoDepositTotal)}</strong></div>${demoDeposits.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Test amount</th><th>Demo order ID</th><th>Submitted</th><th>Label</th></tr></thead><tbody>${demoDepositRows}</tbody></table></div>` : `<div class="empty-state">No demo deposit tests match ${escapeHtml(date)}.</div>`}</section>` : ""}`;
 }
 
 function marketsPage() {
   return `${pageHeading("Markets & games", "Manage market schedules, open/close status, and results.", button("＋ Add market", "add-market", "primary"))}
     <div class="grid two-col">${[...data.markets].sort((left, right) =>
       String(left.legacySource || "GAMES").localeCompare(String(right.legacySource || "GAMES")) || Number(left.position) - Number(right.position) || left.name.localeCompare(right.name)
-    ).map((market) => `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)} · ${escapeHtml(marketDaysLabel(market.days || marketDaysForSource(market.legacySource || "GAMES")))}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${escapeHtml(market.result || "—")}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`).join("") || `<div class="panel empty-state">No markets added yet.</div>`}</div>`;
+    ).map((market) => {
+      const result = market.resultDate === localDateKey() && !marketResultWasReset(market)
+        ? market.result
+        : market.type === "Starline" ? "### - #" : "### - ## - ###";
+      return `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)} · ${escapeHtml(marketDaysLabel(market.days || marketDaysForSource(market.legacySource || "GAMES")))}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${resultBreakdownMarkup(result)}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`;
+    }).join("") || `<div class="panel empty-state">No markets added yet.</div>`}</div>`;
 }
 
 function resultsPage() {
   const market = data.markets.find((item) => item.id === resultMarketSelection) || data.markets[0];
   if (market && !data.markets.some((item) => item.id === resultMarketSelection)) resultMarketSelection = market.id;
   const date = resultDateSelection;
-  const sameDayResults = (market?.results || []).filter((item) => item.date === date);
-  const storedResult = sameDayResults.find((item) => item.session === resultSessionSelection)?.result
-    || sameDayResults.find((item) => !item.session)?.result
-    || (date === localDateKey() ? market?.result : "");
-  const baseResult = sameDayResults.find((item) => item.session !== resultSessionSelection)?.result
-    || sameDayResults.find((item) => item.session === resultSessionSelection)?.result
-    || sameDayResults.find((item) => !item.session)?.result
-    || market?.result;
+  const sameDayResults = marketResultsForDate(market, date);
+  const storedResult = sameDayResults.find((item) => normalizedResultSession(item.session) === resultSessionSelection)?.result
+    || sameDayResults.find((item) => !item.session)?.result;
+  const baseResult = sameDayResults.find((item) => normalizedResultSession(item.session) && normalizedResultSession(item.session) !== resultSessionSelection)?.result
+    || sameDayResults.find((item) => normalizedResultSession(item.session) === resultSessionSelection)?.result
+    || sameDayResults.find((item) => !item.session)?.result;
   const preview = market && resultPanelDraft.length === 3
     ? buildMarketResult(market, resultSessionSelection, resultPanelDraft, baseResult)
     : storedResult || "";
   const winners = resultWinners(market, preview, date, resultSessionSelection);
+  const resultBids = resultBidsForSession(market, preview, date, resultSessionSelection);
+  const resultBidRows = resultBids.length ? `<div class="table-wrap"><table><thead><tr><th>Player</th><th>Mobile</th><th>Game</th><th>Number</th><th>Points</th><th>Outcome</th><th>Win amount</th></tr></thead><tbody>${resultBids.map((entry) => `<tr><td>${escapeHtml(entry.player)}</td><td>${escapeHtml(entry.mobile || "—")}</td><td>${escapeHtml(entry.type)}</td><td><strong>${escapeHtml(entry.number)}</strong></td><td>${money(entry.points)}</td><td>${statusTag(entry.outcome)}</td><td>${entry.outcome === "Winner" ? `<strong>${money(entry.winningAmount)}</strong>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No bids for this market, date, and session.</div>`;
   const settlementId = market ? `${market.id}|${date}|${resultSessionSelection}` : "";
   const settlement = data.settlements.find((item) => item.id === settlementId);
   const winnerGroups = new Map();
@@ -1575,27 +1971,28 @@ function resultsPage() {
     winnerGroups.set(winner.selection, group);
   }
   const groupedWinners = winnerGroups.size ? `<div class="grid two-col">${Array.from(winnerGroups.entries()).map(([number, entries]) => `<section class="panel"><div class="panel-head"><div><h2>Number: ${escapeHtml(number)}</h2><p>${entries.length} winning bid${entries.length === 1 ? "" : "s"}</p></div><strong>${money(entries.reduce((sum, entry) => sum + entry.winningAmount, 0))}</strong></div><div class="table-wrap"><table><thead><tr><th>Mobile</th><th>Name</th><th>Bet</th><th>Win amount</th><th>Action</th></tr></thead><tbody>${entries.map((entry) => `<tr><td>${escapeHtml(entry.mobile || "—")}</td><td>${escapeHtml(entry.player)}</td><td>${money(entry.points)}</td><td><strong>${money(entry.winningAmount)}</strong></td><td>${isEditableBid(entry) ? `<button class="button small" data-action="edit-bid" data-id="${escapeHtml(entry.id)}">Change number</button>` : `<span title="The source bid could not be matched safely.">Not editable</span>`}</td></tr>`).join("")}</tbody></table></div></section>`).join("")}</div>` : `<div class="empty-state">${preview ? "No bids match this market result for the selected date and session." : "Enter a 3-digit panel and publish the result to check winning bids."}</div>`;
-  const history = data.markets.flatMap((item) => (item.results || []).map((result) => ({ market: item, ...result })))
-    .sort((left, right) => String(right.date).localeCompare(String(left.date))).slice(0, 30);
-  const resultHistory = history.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Market</th><th>Session</th><th>Result</th><th></th></tr></thead><tbody>${history.map((item) => `<tr><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.market.name)}</td><td>${escapeHtml(item.session || "—")}</td><td><strong>${escapeHtml(item.result)}</strong></td><td><button class="button small" data-action="load-result" data-id="${escapeHtml(item.market.id)}" data-session="${escapeHtml(item.session || "Open")}" data-date="${escapeHtml(item.date)}" data-result="${escapeHtml(item.result)}">Review / correct</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No published results recorded yet.</div>`;
-  return `${pageHeading("Update results", "Select the market and session, enter the panel as in the AIA app, review matching bids, then distribute winnings.", button("Market settings", "go-markets"))}
+  const history = data.markets.flatMap((item) => marketResultsForDate(item, date).map((result) => ({ market: item, ...result })))
+    .sort((left, right) => left.market.name.localeCompare(right.market.name) || String(left.session).localeCompare(String(right.session)));
+  const resultHistory = history.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Market</th><th>Session</th><th>Result</th><th></th></tr></thead><tbody>${history.map((item) => `<tr><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.market.name)}</td><td>${escapeHtml(normalizedResultSession(item.session) || "—")}</td><td><strong>${escapeHtml(item.result)}</strong></td><td><button class="button small" data-action="load-result" data-id="${escapeHtml(item.market.id)}" data-session="${escapeHtml(normalizedResultSession(item.session) || "Open")}" data-date="${escapeHtml(item.date)}" data-result="${escapeHtml(item.result)}">Review / correct</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No results are published for ${escapeHtml(date)}.</div>`;
+  return `${pageHeading("Update results", "Select a date to review that day’s results, bids, winners, and losers. New results default to today.", button("Market settings", "go-markets"))}
     <section class="panel"><div class="panel-head"><div><h2>Publish a market result</h2><p>Main markets combine open and close panels; Starline shows one panel and its single digit.</p></div></div>
       ${market ? `<form id="result-form"><div class="form-grid">
         <div class="form-field"><label for="result-market">Market</label><select id="result-market" name="market" class="select" required>${data.markets.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === market.id ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></div>
         <div class="form-field"><label for="result-session">Session</label><select id="result-session" name="session">${["Open", "Close"].map((session) => `<option${resultSessionSelection === session ? " selected" : ""}>${session}</option>`).join("")}</select></div>
         <div class="form-field"><label for="result-date">Result date</label><input id="result-date" name="date" type="date" class="field" value="${escapeHtml(date)}" required></div>
         <div class="form-field"><label for="result-panel">Panel number</label><input id="result-panel" name="panel" class="field" value="${escapeHtml(resultPanelDraft)}" placeholder="Enter 3-digit panel" inputmode="numeric" maxlength="3" pattern="[0-9]{3}" required></div>
-        </div><div class="panel" style="margin-top:15px;text-align:center"><small>${escapeHtml(market.name)} · ${escapeHtml(resultSessionSelection)} result</small><h2 id="result-preview" style="font-size:24px;margin:8px 0">${escapeHtml(preview || market.result || "### - ## - ###")}</h2><p class="hint">The single digit is derived from the panel. The jodi is completed when both market sessions are known.</p></div>
+        </div><div class="panel" style="margin-top:15px;text-align:center"><small>${escapeHtml(market.name)} · ${escapeHtml(resultSessionSelection)} result</small><div id="result-preview" style="font-size:18px;margin:8px 0">${resultBreakdownMarkup(preview || "### - ## - ###")}</div><p class="hint">Open result uses the Open panel and first Jodi digit; Close result uses the second Jodi digit and Close panel. Single digits are derived from each panel.</p></div>
         <div class="button-row" style="margin-top:18px"><button class="button primary" type="submit">Update result &amp; review bids</button><button class="button" type="button" data-action="clear-result">Clear panel</button></div></form>` : `<div class="empty-state">Add a market before publishing a result.</div>`}
     </section>
     ${market ? `<section class="panel" style="margin-top:16px"><div class="panel-head"><div><h2>Winning bids · ${escapeHtml(market.name)}</h2><p>${escapeHtml(date)} · ${escapeHtml(resultSessionSelection)} · result ${escapeHtml(preview || "not published")}</p></div><div class="button-row">${settlement ? `<span class="status approved">Already distributed · ${money(settlement.total)}</span>` : `<button class="button primary" data-action="distribute-winnings" data-id="${escapeHtml(market.id)}" data-date="${escapeHtml(date)}" data-session="${escapeHtml(resultSessionSelection)}" data-result="${escapeHtml(preview)}" ${winners.length ? "" : "disabled"}>Distribute amount · ${money(winners.reduce((sum, entry) => sum + entry.winningAmount, 0))}</button>`}</div></div>${settlement && settlement.result !== preview ? `<div class="warning-box">A different result was already distributed (${escapeHtml(settlement.result)}). This panel will not pay the same session twice; reconcile any correction through reviewed wallet adjustments.</div>` : ""}${groupedWinners}</section>` : ""}
-    <section class="panel" style="margin-top:16px"><div class="panel-head"><div><h2>Result history</h2><p>Published results can be reviewed or corrected; new results update the player-app market record.</p></div></div>${resultHistory}</section>`;
+    ${market ? `<section class="panel" style="margin-top:16px"><div class="panel-head"><div><h2>Bids · winners and losers · ${escapeHtml(market.name)}</h2><p>${escapeHtml(date)} · ${escapeHtml(resultSessionSelection)} · bids stay pending until the required result panels are published.</p></div></div>${resultBidRows}</section>` : ""}
+    <section class="panel" style="margin-top:16px"><div class="panel-head"><div><h2>Result history · ${escapeHtml(date)}</h2><p>Only results for the selected date are shown. Choose another date above to review its history.</p></div></div>${resultHistory}</section>`;
 }
 
 function ratesPage() {
-  return `${pageHeading("Rate chart", "Edit the payout rates used for each game type.", button("Reset defaults", "reset-rates"))}
+  return `${pageHeading("Rate chart", "Edit the payout awarded for each ₹10 stake.", button("Reset defaults", "reset-rates"))}
     <section class="panel"><div class="panel-head"><div><h2>Game payout rates</h2></div></div>
-    <form id="rates-form"><div class="table-wrap"><table><thead><tr><th>Game type</th><th>Example</th><th>Payout rate</th><th>Per ₹1</th></tr></thead><tbody>${data.rates.map((rate, index) => `<tr><td><strong>${escapeHtml(rate.id)}</strong></td><td>${["0 – 9", "00 – 99", "124, 234, 368", "112, 577, 336", "111, 222, 444", "Open + close", "Open + close"][index]}</td><td><input class="field" style="max-width:140px" type="number" min="0" step="0.01" name="${escapeHtml(rate.id)}" value="${escapeHtml(rate.value)}" required></td><td>${money(rate.value)}</td></tr>`).join("")}</tbody></table></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Save rates</button></div></form></section>`;
+    <form id="rates-form"><div class="table-wrap"><table><thead><tr><th>Game type</th><th>Example</th><th>Payout per ₹10</th><th>Equivalent per ₹1</th></tr></thead><tbody>${data.rates.map((rate, index) => `<tr><td><strong>${escapeHtml(rate.id)}</strong></td><td>${["0 – 9", "00 – 99", "124, 234, 368", "112, 577, 336", "111, 222, 444", "Open + close", "Open + close"][index]}</td><td><input class="field" style="max-width:140px" type="number" min="0" step="0.01" name="${escapeHtml(rate.id)}" value="${escapeHtml(rate.value)}" required></td><td>${money(Number(rate.value) / 10)}</td></tr>`).join("")}</tbody></table></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Save rates</button></div></form></section>`;
 }
 
 function transactionTable(rows) {
@@ -1603,16 +2000,20 @@ function transactionTable(rows) {
 }
 
 function transactionsPage() {
-  const rows = data.transactions.filter((item) => `${item.player} ${item.mobile} ${item.id} ${item.type} ${item.note}`.toLowerCase().includes(transactionQuery.toLowerCase()));
-  const added = data.transactions.filter((item) => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
-  const withdrawn = Math.abs(data.transactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
-  const played = Math.abs(data.transactions.filter((item) => item.type === "Played").reduce((sum, item) => sum + item.amount, 0));
-  return `${pageHeading("Transactions", "Review wallet credits, withdrawals, gameplay, and winnings.", button("＋ Record transaction", "manual-payment", "primary"))}
-    <div class="grid three-col" style="margin-bottom:15px"><div class="panel metric-mini"><span>Total added</span><strong>${money(added)}</strong></div><div class="panel metric-mini"><span>Total withdrawn</span><strong>${money(withdrawn)}</strong></div><div class="panel metric-mini"><span>Total played</span><strong>${money(played)}</strong></div></div>
+  const date = resultDateSelection || localDateKey();
+  const dateTransactions = data.transactions.filter((item) => transactionDateKey(item) === date);
+  const rows = dateTransactions.filter((item) => `${item.player} ${item.mobile} ${item.id} ${item.type} ${item.note}`.toLowerCase().includes(transactionQuery.toLowerCase()));
+  const added = dateTransactions.filter((item) => !item.demo && item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
+  const withdrawn = Math.abs(dateTransactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
+  const played = Math.abs(dateTransactions.filter((item) => item.type === "Played").reduce((sum, item) => sum + item.amount, 0));
+  return `${pageHeading("Transactions", "Review wallet credits, withdrawals, gameplay, and winnings for the selected date.", button("＋ Record transaction", "manual-payment", "primary"))}
+    ${reportDateFilter()}
+    <div class="grid three-col" style="margin-bottom:15px"><div class="panel metric-mini"><span>Added · ${escapeHtml(date)}</span><strong>${money(added)}</strong></div><div class="panel metric-mini"><span>Withdrawn · ${escapeHtml(date)}</span><strong>${money(withdrawn)}</strong></div><div class="panel metric-mini"><span>Played · ${escapeHtml(date)}</span><strong>${money(played)}</strong></div></div>
     <section class="panel"><div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="transaction-search" class="field" type="search" placeholder="Search player, reference, or type..." value="${escapeHtml(transactionQuery)}"></div><button class="button" data-action="export">Export data</button></div>${transactionTable(rows)}</section>`;
 }
 
 function playedPage() {
+  const date = resultDateSelection || localDateKey();
   const playedPlayers = Array.from(new Map(data.bets.map((bet) => {
     const player = data.players.find((item) => item.id === bet.playerId || item.mobile === bet.playerId);
     const id = bet.playerId || bet.mobile || "";
@@ -1625,6 +2026,7 @@ function playedPage() {
   }
   const rows = data.bets
     .filter((bet) => {
+      if (resultDateForBid(bet) !== date) return false;
       const player = data.players.find((item) => item.id === bet.playerId || item.mobile === bet.playerId);
       const mobile = bet.mobile || player?.mobile || bet.playerId || "";
       const query = playedQuery.trim().toLowerCase();
@@ -1648,19 +2050,20 @@ function playedPage() {
     const mobile = bet.mobile || player?.mobile || "";
     return `<tr><td>${escapeHtml(bet.player)}</td><td>${escapeHtml(mobile || "—")}</td><td>${escapeHtml(lastSeenLabel(mobile))}</td><td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session || "—")}</td><td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td><td>${money(bet.points)}</td><td>${escapeHtml(bet.date)}</td><td>${editable ? `<button class="button small" data-action="edit-bid" data-id="${escapeHtml(bet.id)}">Change number</button>` : `<span title="The legacy bid details could not be matched uniquely.">Not editable</span>`}</td></tr>`;
   }).join("")}</tbody></table></div>` : `<div class="empty-state">No game entries match this search.</div>`;
-  const marketCounts = new Map(marketNames.map((name) => [name, data.bets.filter((bet) => bet.market === name).length]));
-  const marketFilters = `<div class="market-history-filters" aria-label="Filter bids by market"><button class="button small ${playedMarketFilter === "All" ? "primary" : ""}" data-action="filter-market" data-market="All" aria-pressed="${playedMarketFilter === "All"}">All markets <span>${data.bets.length}</span></button>${marketNames.map((name) => `<button class="button small ${playedMarketFilter === name ? "primary" : ""}" data-action="filter-market" data-market="${escapeHtml(name)}" aria-pressed="${playedMarketFilter === name}">${escapeHtml(name)} <span>${marketCounts.get(name)}</span></button>`).join("")}</div>`;
+  const dateBets = data.bets.filter((bet) => resultDateForBid(bet) === date);
+  const marketCounts = new Map(marketNames.map((name) => [name, dateBets.filter((bet) => bet.market === name).length]));
+  const marketFilters = `<div class="market-history-filters" aria-label="Filter bids by market"><button class="button small ${playedMarketFilter === "All" ? "primary" : ""}" data-action="filter-market" data-market="All" aria-pressed="${playedMarketFilter === "All"}">All markets <span>${dateBets.length}</span></button>${marketNames.map((name) => `<button class="button small ${playedMarketFilter === name ? "primary" : ""}" data-action="filter-market" data-market="${escapeHtml(name)}" aria-pressed="${playedMarketFilter === name}">${escapeHtml(name)} <span>${marketCounts.get(name)}</span></button>`).join("")}</div>`;
   const playersShown = new Set(rows.map((bet) => bet.mobile || bet.playerId).filter(Boolean)).size;
-  return `${pageHeading("Bid history & played games", "Choose a market to see every player who bid in it, then search or narrow by player.", button("Player list", "go-players"))}<section class="panel"><div class="panel-head"><div><h2>${playedMarketFilter === "All" ? "All market bids" : `${escapeHtml(playedMarketFilter)} bids`}</h2><p>${playersShown} player${playersShown === 1 ? "" : "s"} · ${rows.length} bid${rows.length === 1 ? "" : "s"} shown</p></div></div>${marketFilters}<div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="played-search" class="field" type="search" placeholder="Search player, mobile, market, or number..." value="${escapeHtml(playedQuery)}"></div><select id="played-player-filter" class="select"><option value="All">All players</option>${playedPlayers.map((player) => `<option value="${escapeHtml(player.id)}"${playedPlayerFilter === player.id ? " selected" : ""}>${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("")}</select></div>${table}</section>`;
+  return `${pageHeading("Bid history & played games", `Bids for ${escapeHtml(date)}. Choose a market, search by player or number, or select another date.`, button("Player list", "go-players"))}${reportDateFilter()}<section class="panel"><div class="panel-head"><div><h2>${playedMarketFilter === "All" ? `All market bids · ${escapeHtml(date)}` : `${escapeHtml(playedMarketFilter)} bids · ${escapeHtml(date)}`}</h2><p>${playersShown} player${playersShown === 1 ? "" : "s"} · ${rows.length} bid${rows.length === 1 ? "" : "s"} shown</p></div></div>${marketFilters}<div class="toolbar"><div class="search-wrap"><span class="search-mark">⌕</span><input id="played-search" class="field" type="search" placeholder="Search player, mobile, market, or number..." value="${escapeHtml(playedQuery)}"></div><select id="played-player-filter" class="select"><option value="All">All players</option>${playedPlayers.map((player) => `<option value="${escapeHtml(player.id)}"${player.id === playedPlayerFilter ? " selected" : ""}>${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("")}</select></div>${table}</section>`;
 }
 
-function allPublishedWinners() {
+function allPublishedWinners(dateFilter = "") {
   const winnerMap = new Map();
   for (const market of data.markets) {
-    for (const published of market.results || []) {
-      const rawSession = String(published.session || "").toLowerCase();
-      const session = rawSession === "open" ? "Open" : rawSession === "close" ? "Close" : "";
-      if (!session || !published.date || !published.result) continue;
+    const results = dateFilter ? marketResultsForDate(market, dateFilter) : market.results || [];
+    for (const published of results) {
+      const session = normalizedResultSession(published.session);
+      if (!session || !published.date || !published.result || (dateFilter && published.date !== dateFilter)) continue;
       for (const winner of resultWinners(market, published.result, published.date, session)) {
         const key = `${market.id}|${published.date}|${session}|${winner.id}`;
         if (!winnerMap.has(key)) winnerMap.set(key, { ...winner, market: market.name, date: published.date, session });
@@ -1673,8 +2076,28 @@ function allPublishedWinners() {
       || left.selection.localeCompare(right.selection));
 }
 
+function allSettledBidsForDate(date) {
+  const settled = new Map();
+  for (const market of data.markets) {
+    for (const published of marketResultsForDate(market, date)) {
+      const session = normalizedResultSession(published.session);
+      if (published.date !== date || !published.result || !session) continue;
+      for (const bet of resultBidsForSession(market, published.result, date, session)) {
+        if (bet.outcome === "Pending") continue;
+        const key = `${session}|${bet.id}`;
+        if (!settled.has(key)) {
+          settled.set(key, { ...bet, market: market.name, date, session, result: published.result });
+        }
+      }
+    }
+  }
+  return Array.from(settled.values());
+}
+
 function winnersPage() {
-  const winners = allPublishedWinners();
+  const date = resultDateSelection || localDateKey();
+  const winners = allPublishedWinners(date);
+  const losers = allSettledBidsForDate(date).filter((bet) => bet.outcome === "Loser");
   const total = winners.reduce((sum, winner) => sum + winner.winningAmount, 0);
   const distributedIds = new Set(data.settlements.flatMap(settlement =>
     (settlement.winners || []).flatMap(player => player.betIds || [])
@@ -1690,44 +2113,98 @@ function winnersPage() {
     <td><strong>${money(winner.winningAmount)}</strong></td>
     <td>${distributedIds.has(winner.id) ? `<span class="status approved">Distributed</span>` : "Not distributed"}</td>
   </tr>`).join("");
-  return `${pageHeading("Winners", "Winning bids are calculated from published market results and the current rate chart.")}
+  const loserRows = losers.map((bet) => `<tr>
+    <td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session)}</td>
+    <td><div class="table-primary"><span class="user-avatar">${escapeHtml(bet.player[0] || "?")}</span><span><strong>${escapeHtml(bet.player)}</strong><small>${escapeHtml(bet.mobile || "—")}</small></span></div></td>
+    <td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td>
+    <td>${money(bet.points)}</td><td>${escapeHtml(bet.result)}</td>
+  </tr>`).join("");
+  const publishedResults = data.markets.reduce((sum, market) => sum + marketResultsForDate(market, date)
+    .filter((result) => normalizedResultSession(result.session) && result.result).length, 0);
+  return `${pageHeading("Winners & losers", `Settled bids and results for ${escapeHtml(date)}. Change the date to review another day's outcomes.`)}
+    ${reportDateFilter()}
     <div class="grid three-col" style="margin-bottom:15px">
-      <div class="panel metric-mini"><span>Total winning bids</span><strong>${winners.length}</strong></div>
+      <div class="panel metric-mini"><span>Winning bids · ${escapeHtml(date)}</span><strong>${winners.length}</strong></div>
       <div class="panel metric-mini"><span>Total winning amount</span><strong>${money(total)}</strong></div>
-      <div class="panel metric-mini"><span>Published results</span><strong>${data.markets.reduce((sum, market) => sum + (market.results || []).filter(result => ["Open", "Close"].includes(result.session) && result.result).length, 0)}</strong></div>
+      <div class="panel metric-mini"><span>Losing bids · ${escapeHtml(date)}</span><strong>${losers.length}</strong></div>
+      <div class="panel metric-mini"><span>Published results · ${escapeHtml(date)}</span><strong>${publishedResults}</strong></div>
     </div>
     <section class="panel"><div class="panel-head"><div><h2>Winning bid history</h2><p>Only bids matching a published result and a configured rate are included.</p></div><button class="button" data-page="results">Update results</button></div>
       ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Market</th><th>Session</th><th>Player</th><th>Game</th><th>Number</th><th>Bid points</th><th>Winning amount</th><th>Distribution</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state">No winning bids are available for published results yet.</div>`}
+    </section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Losing bids · ${escapeHtml(date)}</h2><p>Only bids with a published, complete result for their session are marked as losing.</p></div></div>
+      ${loserRows ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Player</th><th>Game</th><th>Number</th><th>Points</th><th>Result</th></tr></thead><tbody>${loserRows}</tbody></table></div>` : `<div class="empty-state">No losing bids for ${escapeHtml(date)}.</div>`}
     </section>`;
 }
 
 function reportsPage() {
+  const date = resultDateSelection || localDateKey();
   const balance = data.players.reduce((sum, player) => sum + Number(player.balance || 0), 0);
-  const totalAdded = data.transactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0);
-  const totalWithdraw = Math.abs(data.transactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    return { label: date.toLocaleDateString("en", { weekday: "short" }), key: date.toLocaleDateString("en-CA"), value: data.transactions.filter((item) => item.date.startsWith(date.toLocaleDateString("en-CA")) && item.amount > 0).reduce((sum, item) => sum + item.amount, 0) };
-  });
-  const max = Math.max(...days.map((day) => day.value), 1);
-  return `${pageHeading("Reports", "A summary of account activity and player balances.", button("Export data", "export"))}
-    <div class="grid three-col" style="margin-bottom:15px"><div class="panel metric-mini"><span>Total player balance</span><strong>${money(balance)}</strong></div><div class="panel metric-mini"><span>Lifetime added</span><strong>${money(totalAdded)}</strong></div><div class="panel metric-mini"><span>Lifetime withdrawn</span><strong>${money(totalWithdraw)}</strong></div></div>
-    <section class="panel"><div class="panel-head"><div><h2>Credits · last 7 days</h2></div></div><div class="bar-chart">${days.map((day) => `<div class="bar-item"><strong>${day.value ? money(day.value) : ""}</strong><div class="bar" style="height:${Math.max(day.value / max * 68, day.value ? 7 : 2)}%"></div><span>${day.label}</span></div>`).join("")}</div></section>`;
+  const dateTransactions = data.transactions.filter((item) => transactionDateKey(item) === date);
+  const dateBets = data.bets.filter((bet) => resultDateForBid(bet) === date);
+  const settledBids = allSettledBidsForDate(date);
+  const publishedResults = data.markets.flatMap((market) => marketResultsForDate(market, date)
+    .filter((result) => normalizedResultSession(result.session) && result.result)
+    .map((result) => ({ market: market.name, ...result })));
+  const added = dateTransactions.filter((item) => item.type === "Added").reduce((sum, item) => sum + item.amount, 0);
+  const withdrawn = Math.abs(dateTransactions.filter((item) => item.type === "Withdrawal").reduce((sum, item) => sum + item.amount, 0));
+  const winningAmount = settledBids.filter((bet) => bet.outcome === "Winner").reduce((sum, bet) => sum + bet.winningAmount, 0);
+  return `${pageHeading("Reports", `Wallet, bid, win, and loss activity for ${escapeHtml(date)}.`, button("Export data", "export"))}
+    ${reportDateFilter()}
+    <div class="grid three-col" style="margin-bottom:15px"><div class="panel metric-mini"><span>Current player balances</span><strong>${money(balance)}</strong></div><div class="panel metric-mini"><span>Points added · ${escapeHtml(date)}</span><strong>${money(added)}</strong></div><div class="panel metric-mini"><span>Points withdrawn · ${escapeHtml(date)}</span><strong>${money(withdrawn)}</strong></div><div class="panel metric-mini"><span>Bid points · ${escapeHtml(date)}</span><strong>${money(dateBets.reduce((sum, bet) => sum + (Number(bet.points) || 0), 0))}</strong></div><div class="panel metric-mini"><span>Winning amount · ${escapeHtml(date)}</span><strong>${money(winningAmount)}</strong></div><div class="panel metric-mini"><span>Winning / losing bids</span><strong>${settledBids.filter((bet) => bet.outcome === "Winner").length} / ${settledBids.filter((bet) => bet.outcome === "Loser").length}</strong></div></div>
+    <section class="panel"><div class="panel-head"><div><h2>Published results · ${escapeHtml(date)}</h2><p>Market results recorded on the selected date.</p></div></div>${publishedResults.length ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Result</th></tr></thead><tbody>${publishedResults.map((result) => `<tr><td>${escapeHtml(result.market)}</td><td>${escapeHtml(result.session)}</td><td><strong>${escapeHtml(result.result)}</strong></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No results are published for ${escapeHtml(date)}.</div>`}</section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Wallet activity · ${escapeHtml(date)}</h2><p>Transactions recorded on the selected date.</p></div></div>${transactionTable(dateTransactions)}</section>`;
 }
 
 function noticesPage() {
-  const senderReady = Boolean(
-    localStorage.getItem(BROADCAST_ENDPOINT_KEY) && localStorage.getItem(BROADCAST_TOKEN_KEY)
-  );
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
     <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Google Apps Script sender</h2><p>${senderReady ? "Sender settings saved in this browser." : "Configure the deployed Apps Script URL and broadcast token to enable push delivery."}</p></div><button class="button" type="button" data-action="configure-broadcast">Configure sender</button></div><p class="hint">Market result updates and notice changes will be sent to all OneSignal subscribers.</p></section>`;
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal (direct REST)</h2><p>App ID <code>${escapeHtml(ONESIGNAL_APP_ID)}</code>. Push IDs loaded from daily-market-hub <code>All Users/{phone}/push</code>.</p></div>
+      <button class="button primary" type="button" data-action="test-broadcast">Test broadcast</button>
+      <button class="button" type="button" data-page="push-notify">Compose message</button>
+    </div></section>`;
+}
+
+function pushNotifyPage() {
+  const players = (data.players || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const options = players.map(p => `<option value="${escapeHtml(p.mobile)}">${escapeHtml(p.name)} · ${escapeHtml(p.mobile)}</option>`).join("");
+  return `${pageHeading("Push notifications", "Send OneSignal messages with the REST API key (no backend).")}
+    <section class="panel">
+      <div class="panel-head"><div><h2>Broadcast to all</h2><p>Sends to OneSignal segment <strong>All</strong>.</p></div></div>
+      <form id="push-broadcast-form">
+        <div class="form-grid">
+          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="Sridevi Matka" required></div>
+          <div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="3" maxlength="400" required placeholder="Write the notification body"></textarea></div>
+        </div>
+        <div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Send broadcast</button></div>
+      </form>
+    </section>
+    <section class="panel" style="margin-top:15px">
+      <div class="panel-head"><div><h2>Send to one player</h2><p>Uses push id from daily-market-hub / All Users / phone / push.</p></div></div>
+      <form id="push-user-form">
+        <div class="form-grid">
+          <div class="form-field full"><label>Player</label><select class="select" name="mobile" required><option value="">Select player</option>${options}</select></div>
+          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="Sridevi Matka" required></div>
+          <div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="3" maxlength="400" required></textarea></div>
+        </div>
+        <div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Send to player</button></div>
+      </form>
+    </section>`;
 }
 
 function settingsPage() {
   const settings = data.settings;
   const line = (key, title, description) => `<div class="settings-row"><div><strong>${title}</strong><small>${description}</small></div><input class="toggle" type="checkbox" data-setting="${key}" ${settings[key] ? "checked" : ""}></div>`;
+  const globalWebPlayState = globalWebPlayAccessEnabled === null
+    ? globalWebPlayAccessError
+      ? `<div class="webplay-risk-state unavailable"><strong>STATUS UNAVAILABLE</strong><small>${escapeHtml(globalWebPlayAccessError)}</small></div>`
+      : `<div class="webplay-risk-state unavailable"><strong>CHECKING STATUS</strong><small>Reading Admin/WV2 from the a2moring Firebase project.</small></div>`
+    : globalWebPlayAccessEnabled
+      ? `<div class="webplay-risk-state risky"><strong>RISKY · GLOBAL ACCESS ON</strong><small>Any signed-in app user can open WebPlay, even when their individual WV tag is false.</small></div>`
+      : `<div class="webplay-risk-state safe"><strong>NOT RISKY · GLOBAL ACCESS OFF</strong><small>Only individually approved players can open WebPlay.</small></div>`;
+  const globalWebPlayAction = globalWebPlayAccessEnabled === null
+    ? "Unavailable"
+    : globalWebPlayAccessEnabled ? "Disable global access" : "Enable global access";
   const guessingMarkets = uniqueGuessingMarkets();
   const guessingInputs = guessingMarkets.map((market, index) => {
     const guess = adminGuessingMarket(market.name) || defaultAdminGuess(market.name);
@@ -1737,7 +2214,11 @@ function settingsPage() {
       <div class="form-field full"><label for="guess-${index}-panna">PANNA</label><input id="guess-${index}-panna" class="field" name="guess-${index}-panna" maxlength="160" value="${escapeHtml(displayGuessNumbers(guess.panna))}" placeholder="255 - 444 - 226 - 145"></div>
     </div></article>`;
   }).join("");
-  return `${pageHeading("Game settings", "Manage player website settings, maintenance, and game availability.")}
+  return `${pageHeading("Game settings", "Manage player website settings, payment methods, maintenance, and game availability.")}
+    <section class="panel webplay-global-panel"><div class="panel-head"><div><span class="webplay-special-label">SPECIAL FEATURE</span><h2>Global WebPlay access</h2><p>Controls <code>a2moring/Admin/WV2</code> in the Native App Firebase project.</p></div></div>
+      ${globalWebPlayState}
+      <button class="button ${globalWebPlayAccessEnabled === null ? "" : globalWebPlayAccessEnabled ? "danger" : "success"} webplay-global-action" data-action="toggle-global-webplay" ${globalWebPlayAccessEnabled === null || globalWebPlayAccessPending ? "disabled" : ""}>${globalWebPlayAccessPending ? "Saving…" : globalWebPlayAction}</button>
+    </section>
     <div class="grid overview-grid"><section class="panel"><div class="panel-head"><div><h2>Platform controls</h2><p>Availability settings are synced to the player website.</p></div></div>
       ${line("maintenance", "Maintenance mode", "Show the service as unavailable to players.")}
       ${line("newRegistrations", "New registrations", "Allow new player accounts to be added.")}
@@ -1751,7 +2232,15 @@ function settingsPage() {
     <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Player website configuration</h2></div></div>
       <form id="player-settings-form"><div class="form-grid">
         <div class="form-field"><label for="signup-bonus">Sign-up bonus (points)</label><input id="signup-bonus" class="field" name="signUpBonus" type="number" min="0" step="0.01" value="${escapeHtml(settings.signUpBonus)}" required></div>
-        <div class="form-field"><label for="minimum-deposit">Minimum deposit (₹)</label><input id="minimum-deposit" class="field" name="minimumDeposit" type="number" min="0" step="1" value="${escapeHtml(settings.minimumDeposit)}" required><div class="hint">Configured at Admin/Admin/MD. This admin setting is not applied by the player app.</div></div>
+        <div class="form-field"><label for="minimum-deposit">Minimum deposit (₹)</label><input id="minimum-deposit" class="field" name="minimumDeposit" type="number" min="0" step="1" value="${escapeHtml(settings.minimumDeposit)}" required><div class="hint">Configured at Admin/Admin/MD and enforced by the player payment options.</div></div>
+        <div class="form-field full"><strong>Player payment options</strong><div class="hint">The secure payment gateway takes priority. Direct UPI opens a payment app; deposits remain pending until an administrator verifies them.</div></div>
+        <label class="settings-row"><span><strong>Enable UPI QR payments</strong><small>Show the payment QR code and UPI ID to players.</small></span><input class="toggle" type="checkbox" name="qrCodeEnabled" ${settings.qrCodeEnabled ? "checked" : ""}></label>
+        <label class="settings-row"><span><strong>Enable direct UPI payments</strong><small>Let players enter an amount and open a UPI app to pay. Admin approval is still required before points are credited.</small></span><input class="toggle" type="checkbox" name="directPaymentEnabled" ${settings.directPaymentEnabled ? "checked" : ""}></label>
+        <label class="settings-row"><span><strong>Enable secure payment gateway</strong><small>Use the hosted payment flow when a gateway URL is configured.</small></span><input class="toggle" type="checkbox" name="paymentGatewayEnabled" ${settings.paymentGatewayEnabled ? "checked" : ""}></label>
+        <div class="form-field full"><label for="upi-id">UPI ID</label><input id="upi-id" class="field" name="upiId" type="text" maxlength="160" value="${escapeHtml(settings.upiId)}" placeholder="payments@example"></div>
+        <div class="form-field full"><label for="upi-url-template">UPI payment link template (Admin Upi)</label><input id="upi-url-template" class="field" name="upiUrlTemplate" type="text" maxlength="1000" value="${escapeHtml(settings.upiUrlTemplate)}" placeholder="upi://pay?pa=payments@example&amp;am=###&amp;cu=INR"><div class="hint">Optional. Use the complete UPI link from Firebase, with ### where the entered payment amount should go. The player app replaces it with the amount before opening the UPI app.</div></div>
+        <div class="form-field full"><label for="payment-qr-code">UPI QR code image URL or image data URL</label><textarea id="payment-qr-code" class="textarea" name="qrCode" rows="3" maxlength="500000" placeholder="https://… or data:image/png;base64,…">${escapeHtml(settings.qrCode)}</textarea></div>
+        <div class="form-field full"><label for="payment-gateway-url">Secure payment gateway API URL</label><input id="payment-gateway-url" class="field" name="paymentGatewayUrl" type="url" value="${escapeHtml(settings.paymentGatewayUrl)}" placeholder="https://your-site.example/payment-api.php"><div class="hint">Enter the HTTPS URL of your server endpoint. Never enter a gateway API token here; keep it in the private server config outside public_html.</div></div>
         <div class="form-field"><label for="minimum-withdrawal">Minimum withdrawal (₹)</label><input id="minimum-withdrawal" class="field" name="minimumWithdrawal" type="number" min="0" step="1" value="${escapeHtml(settings.minimumWithdrawal)}" required></div>
         <div class="form-field"><label for="minimum-entry">Minimum bid points</label><input id="minimum-entry" class="field" name="minimumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.minimumEntry)}" required><div class="hint">Minimum points for each number; 0 disables the limit.</div></div>
         <div class="form-field"><label for="maximum-entry">Maximum bid points</label><input id="maximum-entry" class="field" name="maximumEntry" type="number" min="0" step="1" value="${escapeHtml(settings.maximumEntry)}" required><div class="hint">Maximum points for each number; 0 disables the limit.</div></div>
@@ -1762,7 +2251,9 @@ function settingsPage() {
         <div class="form-field"><label for="withdraw-evening-open">Evening open time</label><input id="withdraw-evening-open" class="field" name="eveningOpen" type="time" value="${escapeHtml(settings.withdrawalWindows.evening.open)}" required></div>
         <div class="form-field"><label for="withdraw-evening-close">Evening close time</label><input id="withdraw-evening-close" class="field" name="eveningClose" type="time" value="${escapeHtml(settings.withdrawalWindows.evening.close)}" required></div>
         <div class="form-field"><label for="player-website-url">Results website URL</label><input id="player-website-url" class="field" name="websiteUrl" type="text" value="${escapeHtml(settings.websiteUrl)}" placeholder="https://example.com"></div>
-        <div class="form-field"><label for="result-chart-url">Market result chart URL</label><input id="result-chart-url" class="field" name="resultChartUrl" type="url" value="${escapeHtml(settings.resultChartUrl)}" placeholder="${escapeHtml(DEFAULT_RESULT_CHART_URL)}"></div>
+        <div class="form-field"><label for="matka-60-url">Matka 60 URL</label><input id="matka-60-url" class="field" name="matka60Url" type="url" value="${escapeHtml(settings.matka60Url)}" placeholder="Leave empty to show Coming Soon"></div>
+        <div class="form-field"><label for="matka-30-url">Matka 30 URL</label><input id="matka-30-url" class="field" name="matka30Url" type="url" value="${escapeHtml(settings.matka30Url)}" placeholder="Leave empty to show Coming Soon"></div>
+        <div class="form-field"><label for="result-chart-url">Market result chart URL</label><input id="result-chart-url" class="field" name="resultChartUrl" type="url" value="${escapeHtml(settings.resultChartUrl)}" placeholder="https://your-domain.example/result.html"></div>
         <div class="form-field"><label for="support-contact-url">WhatsApp support URL</label><input id="support-contact-url" class="field" name="contactUrl" type="text" value="${escapeHtml(settings.contactUrl)}" placeholder="https://wa.me/91..."></div>
         <div class="form-field"><label for="telegram-url">Telegram URL</label><input id="telegram-url" class="field" name="telegramUrl" type="text" value="${escapeHtml(settings.telegramUrl)}" placeholder="https://t.me/..."></div>
         <div class="form-field full"><label for="player-policy">Privacy policy</label><textarea id="player-policy" class="textarea" name="policy" rows="5" maxlength="8000">${escapeHtml(settings.policy)}</textarea></div>
@@ -1774,8 +2265,8 @@ function settingsPage() {
 }
 
 function detailsPage() {
-  return `${pageHeading("Admin profile", "A2 MORNING administrator workspace.", button("Back to dashboard", "go-dashboard"))}
-    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>A2 MORNING Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
+  return `${pageHeading("Admin profile", "Sridevi Matka administrator workspace.", button("Back to dashboard", "go-dashboard"))}
+    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>Sridevi Matka Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
 }
 
 function activePlayer() {
@@ -1815,13 +2306,43 @@ function resultComponents(value) {
   };
 }
 
+function normalizedResultSession(value) {
+  const session = String(value || "").toLowerCase();
+  return session === "open" ? "Open" : session === "close" ? "Close" : "";
+}
+
+function marketResultWasReset(market) {
+  const rawResult = String(market?.legacyFields?.[6] || "").trim();
+  const parts = rawResult.split(/\s*-\s*/).map((part) => part.trim());
+  return (parts.length >= 2 && parts.every((part) => /^#+$/.test(part)))
+    || (Boolean(market?.resultDate) && market.resultDate !== localDateKey());
+}
+
+function marketResultsForDate(market, date) {
+  if (date === localDateKey() && (!market || market.resultDate !== date || marketResultWasReset(market))) return [];
+  return (market?.results || []).filter((item) => item.date === date);
+}
+
+function resultBreakdownMarkup(value) {
+  const parts = String(value || "").split(/\s*-\s*/).map((part) => part.trim());
+  const openPanel = /^\d{3}$/.test(parts[0] || "") ? parts[0] : "";
+  const closePanel = /^\d{3}$/.test(parts[2] || "") ? parts[2] : "";
+  const jodi = /^(?:\d{2}|\d#|#\d)$/.test(parts[1] || "") ? parts[1] : "";
+  if (!jodi || (!openPanel && !closePanel)) {
+    return `<strong>${escapeHtml(value || "—")}</strong>`;
+  }
+  const openDigit = /^\d/.test(jodi) ? jodi[0] : "#";
+  const closeDigit = /\d$/.test(jodi) ? jodi[jodi.length - 1] : "#";
+  return `<span class="result-breakdown"><span><small>OPEN</small><strong>${escapeHtml(openPanel || "###")} - ${escapeHtml(openDigit)}</strong></span><span><small>CLOSE</small><strong>${escapeHtml(closeDigit)} - ${escapeHtml(closePanel || "###")}</strong></span></span>`;
+}
+
 function panelSingle(panel) {
   return /^\d{3}$/.test(String(panel || ""))
     ? String([...panel].reduce((sum, digit) => sum + Number(digit), 0) % 10)
     : "";
 }
 
-function buildMarketResult(market, session, panel, baseResult = market.result) {
+function buildMarketResult(market, session, panel, baseResult = "") {
   if (!/^\d{3}$/.test(panel)) return "";
   const existing = resultComponents(baseResult);
   if (market.type === "Starline") return `${panel} - ${panelSingle(panel)}`;
@@ -1845,15 +2366,26 @@ function resultDateForBid(bet) {
 }
 
 function canonicalGameType(value) {
-  const type = String(value || "").trim().toLowerCase();
+  const type = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, " ");
   if (type === "single" || type === "single digit") return "Single Digit";
-  if (type === "jodi" || type === "double digit" || type === "jodi digit") return "Jodi Digit";
-  if (type === "single pana") return "Single Pana";
-  if (type === "double pana") return "Double Pana";
-  if (type === "triple pana") return "Triple Pana";
+  if (type === "jodi" || type === "double digit" || type === "jodi digit" || type === "bulk jodi") return "Jodi Digit";
+  if (type === "single pana" || type === "sp motor") return "Single Pana";
+  if (type === "double pana" || type === "dp motor") return "Double Pana";
+  if (type === "triple pana" || type === "tp motor") return "Triple Pana";
+  if (type === "sp dp tp") return "SP DP TP";
   if (type === "half sangam") return "Half Sangam";
   if (type === "full sangam") return "Full Sangam";
   return "";
+}
+
+function payoutRateType(gameType, selection) {
+  const type = canonicalGameType(gameType);
+  if (type !== "SP DP TP") return type;
+  if (!/^\d{3}$/.test(selection)) return "";
+  const distinctDigits = new Set(selection).size;
+  if (distinctDigits === 1) return "Triple Pana";
+  if (distinctDigits === 2) return "Double Pana";
+  return distinctDigits === 3 ? "Single Pana" : "";
 }
 
 function winningSelection(bet, market, result, session) {
@@ -1870,7 +2402,7 @@ function winningSelection(bet, market, result, session) {
     const jodi = `${panelSingle(values.openPanel)}${panelSingle(values.closePanel)}`;
     return session === "Close" && values.openPanel && values.closePanel && selection === jodi ? selection : "";
   }
-  if (["Single Pana", "Double Pana", "Triple Pana"].includes(type)) {
+  if (["Single Pana", "Double Pana", "Triple Pana", "SP DP TP"].includes(type)) {
     const panel = market.type === "Starline" ? values.openPanel : betSession === "close" ? values.closePanel : values.openPanel;
     return panel && selection === panel ? selection : "";
   }
@@ -1880,26 +2412,44 @@ function winningSelection(bet, market, result, session) {
     return selections.includes(selection) ? selection : "";
   }
   if (type === "Full Sangam" && values.openPanel && values.closePanel) {
-    return session === "Close" && selection === `${values.openPanel}-${values.closePanel}` ? selection : "";
+    const jodi = `${panelSingle(values.openPanel)}${panelSingle(values.closePanel)}`;
+    return session === "Close" && selection === `${values.openPanel}-${jodi}-${values.closePanel}` ? selection : "";
   }
   return "";
 }
 
-function resultWinners(market, result, date, session) {
-  if (!market || !result || !date) return [];
+function resultIsReadyForBid(bet, market, result) {
+  const values = resultComponents(result);
+  const type = canonicalGameType(bet.type);
+  if (["Jodi Digit", "Half Sangam", "Full Sangam"].includes(type)) {
+    return Boolean(values.openPanel && values.closePanel);
+  }
+  if (["Single Digit", "Single Pana", "Double Pana", "Triple Pana", "SP DP TP"].includes(type)) {
+    const panel = market.type === "Starline" || String(bet.session || "").toLowerCase() !== "close"
+      ? values.openPanel : values.closePanel;
+    return Boolean(panel);
+  }
+  return false;
+}
+
+function resultBidsForSession(market, result, date, session) {
+  if (!market || !date || !["Open", "Close"].includes(session)) return [];
   const rates = new Map(data.rates.map((rate) => [canonicalGameType(rate.id) || rate.id, Number(rate.value)]));
   return data.bets.flatMap((bet) => {
     const type = canonicalGameType(bet.type);
     const bidSession = String(bet.session || "Open").toLowerCase();
-    const bothPanelsSettleAtClose = ["Half Sangam", "Full Sangam"].includes(type);
+    const bothPanelsSettleAtClose = ["Jodi Digit", "Half Sangam", "Full Sangam"].includes(type);
+    const invalidFullSangamSession = type === "Full Sangam" && bidSession !== "open";
     if (String(bet.market || "").trim().toLowerCase() !== market.name.trim().toLowerCase()
       || resultDateForBid(bet) !== date
+      || invalidFullSangamSession
       || (bothPanelsSettleAtClose ? session !== "Close" : bidSession !== session.toLowerCase())) return [];
-    const selection = winningSelection(bet, market, result, session);
-    const rate = rates.get(type);
+    const ready = resultIsReadyForBid(bet, market, result);
+    const selection = ready ? winningSelection(bet, market, result, session) : "";
+    const rate = selection ? rates.get(payoutRateType(bet.type, selection)) : undefined;
     const points = Number(bet.points);
     const player = data.players.find((item) => item.id === bet.playerId || item.mobile === (bet.mobile || bet.playerId));
-    if (!selection || !Number.isFinite(rate) || !Number.isFinite(points) || points <= 0) return [];
+    if (!Number.isFinite(points) || points <= 0) return [];
     return [{
       ...bet,
       player: player?.name || bet.player || bet.mobile || "Player",
@@ -1907,9 +2457,15 @@ function resultWinners(market, result, date, session) {
       playerId: player?.id || bet.playerId || bet.mobile,
       selection,
       rate,
-      winningAmount: points * rate,
+      outcome: !ready ? "Pending" : selection ? Number.isFinite(rate) ? "Winner" : "Winner · rate unavailable" : "Loser",
+      winningAmount: Number.isFinite(rate) ? Math.round((points * rate / 10 + Number.EPSILON) * 100) / 100 : 0,
     }];
   }).sort((left, right) => left.selection.localeCompare(right.selection) || left.player.localeCompare(right.player));
+}
+
+function resultWinners(market, result, date, session) {
+  return resultBidsForSession(market, result, date, session)
+    .filter((bet) => bet.outcome === "Winner");
 }
 
 function playerAppPage() {
@@ -1946,6 +2502,7 @@ function playerAccountPage() {
 }
 
 function playerHistoryPage() {
+  const date = resultDateSelection || localDateKey();
   const query = playerHistorySearch.trim().toLowerCase();
   const rawDigits = query.replace(/\D/g, "");
   const queryDigits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits;
@@ -1956,8 +2513,9 @@ function playerHistoryPage() {
   const player = matchingPlayers.find((item) => item.id === selectedPlayerId) || matchingPlayers[0];
   const selector = `<div class="grid two-col"><div class="form-field"><label for="player-history-search">Search by name or phone</label><input id="player-history-search" class="field" type="search" inputmode="tel" placeholder="Enter player name or phone number" value="${escapeHtml(playerHistorySearch)}"></div><div class="form-field"><label for="portal-player">Select player</label><select id="portal-player" class="select">${matchingPlayers.map((item) => `<option value="${escapeHtml(item.id)}"${item.id === player?.id ? " selected" : ""}>${escapeHtml(item.name)} · ${escapeHtml(item.mobile)}</option>`).join("")}</select></div></div>`;
   if (player) selectedPlayerId = player.id;
-  const transactions = data.transactions.filter((item) => item.mobile === player?.mobile);
+  const transactions = data.transactions.filter((item) => item.mobile === player?.mobile && transactionDateKey(item) === date);
   const bets = data.bets.filter((item) => player
+    && resultDateForBid(item) === date
     && (item.playerId === player.id || item.playerId === player.mobile || item.mobile === player.mobile))
     .slice()
     .sort((left, right) => {
@@ -1965,9 +2523,9 @@ function playerHistoryPage() {
       const rightTime = Date.parse(right.createdAt || right.date);
       return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
     });
-  return `${pageHeading("My game activity", `Game and wallet history for ${escapeHtml(player?.name || "the selected player")} · Last seen: ${escapeHtml(lastSeenLabel(player?.mobile))}.`, button("Place a game", "go-player-app"))}${selector}
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Game entries</h2><p>${bets.length} ${bets.length === 1 ? "entry" : "entries"}</p></div></div>${bets.length ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Game</th><th>Number</th><th>Points</th><th>Date</th></tr></thead><tbody>${bets.map((bet) => `<tr><td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session)}</td><td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td><td>${money(bet.points)}</td><td>${escapeHtml(bet.date)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No game entries yet.</div>`}</section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Wallet history</h2><p>${transactions.length} transaction${transactions.length === 1 ? "" : "s"}</p></div></div>${transactionTable(transactions)}</section>`;
+  return `${pageHeading("My game activity", `Game and wallet history for ${escapeHtml(player?.name || "the selected player")} on ${escapeHtml(date)} · Last seen: ${escapeHtml(lastSeenLabel(player?.mobile))}.`, button("Place a game", "go-player-app"))}${selector}${reportDateFilter()}
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Game entries · ${escapeHtml(date)}</h2><p>${bets.length} ${bets.length === 1 ? "entry" : "entries"}</p></div></div>${bets.length ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Game</th><th>Number</th><th>Points</th><th>Date</th></tr></thead><tbody>${bets.map((bet) => `<tr><td>${escapeHtml(bet.market)}</td><td>${escapeHtml(bet.session)}</td><td>${escapeHtml(bet.type)}</td><td><strong>${escapeHtml(bet.number)}</strong></td><td>${money(bet.points)}</td><td>${escapeHtml(bet.date)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">No game entries for ${escapeHtml(date)}.</div>`}</section>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>Wallet history · ${escapeHtml(date)}</h2><p>${transactions.length} transaction${transactions.length === 1 ? "" : "s"}</p></div></div>${transactionTable(transactions)}</section>`;
 }
 
 const pageRenderers = {
@@ -1977,7 +2535,7 @@ const pageRenderers = {
   requests: () => requestKindPage("Deposit"),
   markets: marketsPage,
   results: resultsPage, winners: winnersPage, rates: ratesPage, transactions: transactionsPage, played: playedPage,
-  reports: reportsPage, notices: noticesPage, settings: settingsPage, profile: detailsPage,
+  reports: reportsPage, notices: noticesPage, "push-notify": pushNotifyPage, settings: settingsPage, profile: detailsPage,
   "player-app": playerAppPage, "player-account": playerAccountPage, "player-history": playerHistoryPage,
 };
 
@@ -1996,6 +2554,7 @@ function render(preserveFocusedInput = false) {
       selectionEnd: typeof activeElement.selectionEnd === "number" ? activeElement.selectionEnd : null,
     }
     : null;
+  updateTopbarTotals();
   setNav();
   document.getElementById("page-crumb").textContent = currentPage === "profile" ? "Admin profile" : currentPage.replace(/^\w/, (char) => char.toUpperCase()).replace("-", " ");
   pageContent.innerHTML = (pageRenderers[currentPage] || dashboardPage)();
@@ -2040,6 +2599,8 @@ function modal(title, body, onSubmit, options = {}) {
     event.stopPropagation();
     const closeButton = event.target.closest('[data-action="close-modal"]');
     if (closeButton && closeButton !== backdrop) close();
+    const modalAction = event.target.closest("[data-modal-action]");
+    if (modalAction) options.onAction?.(modalAction.dataset.modalAction, dialog);
   });
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) close();
@@ -2085,6 +2646,79 @@ function playerModal(player) {
     render();
     return true;
   });
+}
+
+async function deletePlayerAccount(player) {
+  const mobile = String(player?.mobile || "");
+  if (!player || !/^\d{10,}$/.test(mobile) || !databaseRootRef || playerDeletionsInProgress.has(mobile)) {
+    toast("The player's account or database connection is unavailable.", true);
+    return;
+  }
+
+  playerDeletionsInProgress.add(mobile);
+  try {
+    const snapshot = await databaseRootRef.once("value");
+    const root = snapshot.val() || {};
+    const nextData = normalizeData(root.adminData || data);
+    const isPlayerRecord = (record) => String(record?.mobile || "") === mobile
+      || String(record?.playerId || "") === mobile;
+    nextData.players = nextData.players.filter((item) => !isPlayerRecord(item) && item.id !== mobile);
+    nextData.bets = nextData.bets.filter((item) => !isPlayerRecord(item));
+    nextData.transactions = nextData.transactions.filter((item) => !isPlayerRecord(item));
+    nextData.requests = nextData.requests.filter((item) => !isPlayerRecord(item));
+    nextData.settlements = nextData.settlements.map((settlement) => {
+      if (!Array.isArray(settlement.winners)) return settlement;
+      const winners = settlement.winners.filter((winner) => !isPlayerRecord(winner));
+      return {
+        ...settlement,
+        winners,
+        total: winners.reduce((sum, winner) => sum + (Number(winner.amount) || 0), 0),
+      };
+    });
+    nextData.updatedAt = new Date().toISOString();
+
+    const updates = {
+      [`DATA/${mobile}`]: null,
+      [`Blocked/${mobile}`]: null,
+      [`Normal T Data/${mobile}`]: null,
+      [`Normal T Data2/${mobile}`]: null,
+      "adminData/players": nextData.players,
+      "adminData/bets": nextData.bets,
+      "adminData/transactions": nextData.transactions,
+      "adminData/requests": nextData.requests,
+      "adminData/settlements": nextData.settlements,
+      "adminData/updatedAt": nextData.updatedAt,
+    };
+
+    for (const date of Object.keys(root["New Users"] || {})) {
+      if (Object.prototype.hasOwnProperty.call(root["New Users"][date] || {}, mobile)) {
+        updates[`New Users/${date}/${mobile}`] = null;
+      }
+    }
+
+    const requestMatchesPlayer = (key, value) => {
+      const decoded = decodeLegacyValue(value);
+      const recordMobile = Array.isArray(decoded)
+        ? normalizedAdminPhone(decoded[0])
+        : normalizedAdminPhone(decoded?.mobile || decoded?.phone);
+      return recordMobile === mobile || new RegExp(`(?:^|\\D)${mobile}$`).test(key);
+    };
+    for (const bucket of ["WR", "DR"]) {
+      for (const [key, value] of Object.entries(root[bucket] || {})) {
+        if (requestMatchesPlayer(key, value)) updates[`${bucket}/${key}`] = null;
+      }
+    }
+
+    await databaseRootRef.update(updates);
+    data = nextData;
+    lastSyncedData = structuredClone(nextData);
+    toast(`Deleted ${player.name}'s account and associated database records.`);
+    render();
+  } catch (error) {
+    toast(`Could not delete ${player.name}'s account data: ${error.message}`, true);
+  } finally {
+    playerDeletionsInProgress.delete(mobile);
+  }
 }
 
 function editBidModal(bet) {
@@ -2150,7 +2784,7 @@ function isEditableBid(bet) {
 
 function creditModal(player) {
   if (!player) {
-    modal("Record payment", `<div class="form-grid"><div class="form-field full"><label>Player</label><select class="select" name="player" required>${data.players.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} · ${escapeHtml(item.mobile)}</option>`).join("")}</select></div><div class="form-field"><label>Action</label><select class="select" name="type"><option>Added</option><option>Withdrawal</option></select></div><div class="form-field"><label>Amount (₹)</label><input class="field" name="amount" type="number" min="1" step="0.01" required></div><div class="form-field full"><label>Note</label><input class="field" name="note" maxlength="100" placeholder="Payment details"></div></div>`, (form) => {
+    modal("Record payment", `<div class="form-grid"><div class="form-field full"><label for="manual-player-phone">Find player by phone number</label><div class="phone-search"><input class="field" id="manual-player-phone" type="tel" inputmode="numeric" autocomplete="off" placeholder="Enter 10-digit phone number"><button class="button" type="button" data-modal-action="search-player-phone">Search</button></div><p class="hint" id="manual-player-search-feedback" role="status" aria-live="polite"></p></div><div class="form-field full"><label for="manual-player-select">Player</label><select class="select" id="manual-player-select" name="player" required><option value="" selected disabled>Select a player</option>${data.players.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.mobile)}</option>`).join("")}</select></div><div class="form-field"><label>Action</label><select class="select" name="type"><option>Added</option><option>Withdrawal</option></select></div><div class="form-field"><label>Amount (₹)</label><input class="field" name="amount" type="number" min="1" step="0.01" required></div><div class="form-field full"><label>Note</label><input class="field" name="note" maxlength="100" placeholder="Payment details"></div></div>`, (form) => {
       const selected = data.players.find((item) => item.id === form.get("player"));
       if (!selected) return toast("Select a valid player.", true), false;
       const amount = Number(form.get("amount"));
@@ -2160,10 +2794,40 @@ function creditModal(player) {
       selected.balance += type === "Added" ? amount : -amount;
       if (type === "Added") selected.totalAdded = Number(selected.totalAdded || 0) + amount;
       else selected.totalWithdrawn = Number(selected.totalWithdrawn || 0) + amount;
-      data.transactions.unshift({ id: `T-${Date.now()}`, player: selected.name, mobile: selected.mobile, type, amount: type === "Added" ? amount : -amount, date: new Date().toLocaleString(), note: String(form.get("note") || "Admin entry").trim() });
+      recordManualWalletAdjustment(selected, type, amount, form.get("note"));
       persist("Payment recorded and wallet updated.");
       render();
       return true;
+    }, {
+      onAction(action, dialog) {
+        if (action !== "search-player-phone") return;
+        const phoneInput = dialog.querySelector("#manual-player-phone");
+        const select = dialog.querySelector("#manual-player-select");
+        const feedback = dialog.querySelector("#manual-player-search-feedback");
+        const digits = String(phoneInput.value || "").replace(/\D/g, "");
+        const normalized = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits;
+        if (!/^\d{10}$/.test(normalized)) {
+          select.value = "";
+          feedback.textContent = "Enter a valid 10-digit phone number (or a number starting with +91).";
+          return;
+        }
+        const matches = data.players.filter((item) => {
+          const storedDigits = String(item.mobile || "").replace(/\D/g, "");
+          const storedPhone = storedDigits.length === 12 && storedDigits.startsWith("91") ? storedDigits.slice(2) : storedDigits;
+          return storedPhone === normalized;
+        });
+        if (matches.length !== 1) {
+          select.value = "";
+          feedback.textContent = matches.length ? "More than one player has this phone number. Select the correct player manually." : "No player found with that phone number.";
+          return;
+        }
+        select.value = matches[0].id;
+        feedback.textContent = `Selected ${matches[0].name} · ${matches[0].mobile}.`;
+      },
+    });
+    document.getElementById("manual-player-phone").addEventListener("input", () => {
+      document.getElementById("manual-player-select").value = "";
+      document.getElementById("manual-player-search-feedback").textContent = "";
     });
     return;
   }
@@ -2175,7 +2839,7 @@ function creditModal(player) {
     player.balance += type === "Added" ? amount : -amount;
     if (type === "Added") player.totalAdded = Number(player.totalAdded || 0) + amount;
     else player.totalWithdrawn = Number(player.totalWithdrawn || 0) + amount;
-    data.transactions.unshift({ id: `T-${Date.now()}`, player: player.name, mobile: player.mobile, type, amount: type === "Added" ? amount : -amount, date: new Date().toLocaleString(), note: String(form.get("note") || "Admin wallet adjustment").trim() });
+    recordManualWalletAdjustment(player, type, amount, form.get("note"));
     persist("Player wallet updated.");
     render();
     return true;
@@ -2226,7 +2890,7 @@ function marketModal(market) {
       item.legacyFields = [name, legacyMarketTime(item.open), legacyMarketTime(item.close), "Y", "Y", item.status === "Open" ? "Running" : "Stop", "### - ## - ###", String(item.position)];
     } else {
       item.legacyFields = item.legacyFields.slice();
-      item.legacyFields[8] = JSON.stringify({ id: item.id, days });
+      item.legacyFields[8] = JSON.stringify({ id: item.id, days, resultDate: item.resultDate || "" });
     }
     if (!market) {
       data.markets.push(item);
@@ -2246,14 +2910,29 @@ function resultModal(market) {
 }
 
 function saveResult(market, session, date, result) {
-  const previousResult = (market.results || []).find((item) => item.session === session && item.date === date)?.result;
+  if (date === localDateKey() && market.resultDate !== date) {
+    market.results = (market.results || []).filter((item) => item.date !== date);
+  }
+  const previousResult = (market.results || []).find((item) => normalizedResultSession(item.session) === session && item.date === date)?.result;
   const historyItem = { session, date, result, updatedAt: new Date().toISOString() };
   market.results = market.results || [];
-  const existingIndex = market.results.findIndex((item) => item.session === session && item.date === date);
+  const existingIndex = market.results.findIndex((item) => normalizedResultSession(item.session) === session && item.date === date);
   if (existingIndex >= 0) market.results[existingIndex] = historyItem;
   else market.results.unshift(historyItem);
-  market[session === "Open" ? "openResult" : "closeResult"] = result;
-  market.result = result;
+  if (date === localDateKey()) {
+    market[session === "Open" ? "openResult" : "closeResult"] = result;
+    market.result = result;
+    market.resultDate = date;
+    if (Array.isArray(market.legacyFields)) {
+      market.legacyFields = market.legacyFields.slice();
+      market.legacyFields[6] = result;
+      market.legacyFields[8] = JSON.stringify({
+        id: market.id,
+        days: normalizedMarketDays(market.days),
+        resultDate: date,
+      });
+    }
+  }
   market.updatedAt = Date.now();
   data.transactions.unshift({ id: `R-${Date.now()}`, player: "System", mobile: "—", type: "Result", amount: 0, date: new Date().toLocaleString(), note: `${market.name} · ${session} · ${date} · ${result}` });
   return previousResult !== result;
@@ -2287,7 +2966,8 @@ function distributeWinnings(market, date, session, result) {
     toast("Winnings for this market, date, and session have already been distributed.", true);
     return;
   }
-  const published = (market.results || []).find((item) => item.date === date && item.session === session);
+  const published = marketResultsForDate(market, date)
+    .find((item) => normalizedResultSession(item.session) === session);
   if (!published || published.result !== result) {
     toast("The displayed result is not the current published result. Refresh and review the result before distributing.", true);
     return;
@@ -2350,8 +3030,33 @@ function distributeWinnings(market, date, session, result) {
       });
     }
   }
-  persist(`Distributed ${money(totalPayout)} to ${payoutItems.length} player${payoutItems.length === 1 ? "" : "s"}.`);
+  const savePromise = persist(`Distributed ${money(totalPayout)} to ${payoutItems.length} player${payoutItems.length === 1 ? "" : "s"}.`);
   render();
+  void savePromise.then(async (saved) => {
+    if (!saved) return;
+    const outcomes = await Promise.all(Array.from(payoutByPlayer.values(), async ({ player, amount }) => {
+      try {
+        const subscriptionId = await fetchPushIdForPhone(player.mobile);
+        if (!subscriptionId) return false;
+        // title: total amount win:- {amount} | body: market open/close
+        return await sendPushBroadcast(
+          `total amount win:- ${money(amount)}`,
+          `${market.name} ${session}`,
+          { subscriptionId, silent: true }
+        );
+      } catch (error) {
+        console.error(`Could not send winning notification to ${player.mobile}:`, error);
+        return false;
+      }
+    }));
+    const sent = outcomes.filter(Boolean).length;
+    const notSent = outcomes.length - sent;
+    if (notSent) {
+      toast(`Winning notifications: ${sent} sent; ${notSent} not sent. Check each winner's DATA/<phone>/push ID and notification subscription.`, true);
+    } else {
+      toast(`Winning notifications sent to ${sent} winner${sent === 1 ? "" : "s"}.`);
+    }
+  });
 }
 
 function bidExportTimestamp(bet) {
@@ -2375,16 +3080,20 @@ function bidSettlementDetails(bet) {
   const date = resultDateForBid(bet);
   if (!market || !date) return { outcome: "Pending", result: "", rate: "", winnings: "" };
   const type = canonicalGameType(bet.type);
-  const settlingSession = ["Half Sangam", "Full Sangam"].includes(type) ? "Close" : String(bet.session || "Open");
-  const published = (market.results || []).find((item) => item.date === date && item.session === settlingSession)
-    || (date === localDateKey() && market.result && market.result !== "—" ? { result: market.result } : null);
+  const settlingSession = ["Half Sangam", "Full Sangam"].includes(type)
+    ? "Close"
+    : normalizedResultSession(bet.session) || "Open";
+  const published = marketResultsForDate(market, date)
+    .find((item) => normalizedResultSession(item.session) === settlingSession);
   if (!published?.result) return { outcome: "Pending", result: "", rate: "", winnings: "" };
   if (!type) return { outcome: "Result posted", result: published.result, rate: "", winnings: "" };
   const selection = winningSelection(bet, market, published.result, settlingSession);
   if (!selection) return { outcome: "Loss", result: published.result, rate: "", winnings: "0" };
-  const rate = Number(data.rates.find((item) => canonicalGameType(item.id) === type)?.value);
+  const rateType = payoutRateType(bet.type, selection);
+  const rate = Number(data.rates.find((item) => canonicalGameType(item.id) === rateType)?.value);
   if (!Number.isFinite(rate)) return { outcome: "Won · rate unavailable", result: published.result, rate: "", winnings: "" };
-  return { outcome: "Win", result: published.result, rate, winnings: Number(bet.points) * rate };
+  const points = Number(bet.points);
+  return { outcome: "Win", result: published.result, rate, winnings: Math.round((points * rate / 10 + Number.EPSILON) * 100) / 100 };
 }
 
 function downloadBidExport(range) {
@@ -2427,7 +3136,7 @@ function downloadBidExport(range) {
   const anchor = document.createElement("a");
   anchor.href = url;
   const suffix = range === "today" ? "today" : range === "week" ? "last-7-days" : "all";
-  anchor.download = `a2morning-bids-${suffix}-${localDateKey()}.csv`;
+  anchor.download = `sridevi-matka-bids-${suffix}-${localDateKey()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
   toast(`${rows.length} bid${rows.length === 1 ? "" : "s"} exported with player and result details.`);
@@ -2494,166 +3203,65 @@ function publishBroadcast() {
   }, { submitLabel: "Save & send" });
 }
 
-function configureBroadcastSender() {
-  let endpoint = "";
+async function requestBroadcast(action, payload = {}) {
+  const response = await fetch(BROADCAST_ENDPOINT, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  let result;
   try {
-    endpoint = localStorage.getItem(BROADCAST_ENDPOINT_KEY) || "";
-  } catch (error) {
-    toast(`Could not read sender settings: ${error.message}`, true);
-    return;
+    result = await response.json();
+  } catch {
+    throw new Error("The notification server returned an invalid response.");
   }
-  let token = "";
-  try {
-    token = localStorage.getItem(BROADCAST_TOKEN_KEY) || "";
-  } catch (error) {
-    toast(`Could not read sender settings: ${error.message}`, true);
-    return;
+  if (!result || typeof result !== "object") {
+    throw new Error("The notification server returned an invalid response.");
   }
-  modal("Configure Google Apps Script", `<p class="hint">Enter the deployed Apps Script web app URL and its BROADCAST_TOKEN. These settings are saved in this browser so you will not need to enter them again on your next visit. Do not use this on a shared device.</p><div class="form-grid"><div class="form-field full"><label>Apps Script web app URL</label><input class="field" name="endpoint" type="url" value="${escapeHtml(endpoint)}" placeholder="https://script.google.com/macros/s/.../exec" required></div><div class="form-field full"><label>Broadcast token</label><input class="field" name="token" type="password" minlength="24" maxlength="200" autocomplete="new-password" value="${escapeHtml(token)}" required></div></div>`, (form) => {
-    const url = new URL(String(form.get("endpoint") || "").trim());
-    const token = String(form.get("token") || "").trim();
-    if (url.protocol !== "https:" || url.hostname !== "script.google.com"
-      || !/^\/macros\/s\/[^/]+\/exec$/.test(url.pathname) || url.search || url.hash) {
-      toast("Enter the HTTPS /exec deployment URL from Google Apps Script.", true);
-      return false;
-    }
-    if (token.length < 24) {
-      toast("The broadcast token must contain at least 24 characters.", true);
-      return false;
-    }
-    try {
-      localStorage.setItem(BROADCAST_ENDPOINT_KEY, url.href);
-      localStorage.setItem(BROADCAST_TOKEN_KEY, token);
-    } catch (error) {
-      toast(`Could not save sender settings: ${error.message}`, true);
-      return false;
-    }
-    toast("Google Apps Script sender settings saved in this browser.");
-    render();
-    return true;
-  }, { submitLabel: "Save sender" });
+  if (!response.ok || result.ok !== true) {
+    throw new Error(result.error || `Notification request failed (HTTP ${response.status}).`);
+  }
+  return result;
 }
 
-function sendPushBroadcast(heading, message) {
-  let endpoint;
-  let token;
+async function establishBroadcastSession(phone, password) {
+  return requestBroadcast("login", { phone, password });
+}
+
+async function configureBroadcastSender() {
   try {
-    endpoint = localStorage.getItem(BROADCAST_ENDPOINT_KEY) || "";
-    token = localStorage.getItem(BROADCAST_TOKEN_KEY) || "";
+    const result = await requestBroadcast("status");
+    toast(result.configured
+      ? "OneSignal REST key is configured. A successful send confirms delivery."
+      : "OneSignal REST key is not configured on the server.", !result.configured);
   } catch (error) {
-    toast(`Could not read sender settings: ${error.message}`, true);
-    return Promise.resolve(false);
+    toast(`OneSignal server check failed: ${error.message}`, true);
   }
-  if (!endpoint || !token) {
-    toast("Configure the Google Apps Script sender before sending notifications.", true);
-    return Promise.resolve(false);
-  }
-  if (!/^https:\/\/[^/]+\/macros\/s\/[^/]+\/exec$/.test(endpoint)) {
-    toast("The configured Google Apps Script URL is invalid. Configure it again.", true);
-    return Promise.resolve(false);
-  }
-  if (!window.crypto?.getRandomValues) {
-    toast("Secure random values are unavailable. Open the admin over HTTPS and try again.", true);
-    return Promise.resolve(false);
-  }
-  const bytes = new Uint8Array(16);
-  window.crypto.getRandomValues(bytes);
-  const nonce = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  const frameName = `kalyan-broadcast-${nonce}`;
-  const iframe = document.createElement("iframe");
-  iframe.name = frameName;
-  iframe.hidden = true;
-  iframe.setAttribute("aria-hidden", "true");
-  const form = document.createElement("form");
-  form.method = "post";
-  form.action = endpoint;
-  form.target = frameName;
-  form.hidden = true;
-  const values = { nonce, token, heading, message, imageUrl: BROADCAST_IMAGE_URL };
-  for (const [name, value] of Object.entries(values)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.append(input);
-  }
-  document.body.append(iframe, form);
-  return new Promise((resolve) => {
-    let pollTimer = 0;
-    let pollScript = null;
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      window.clearInterval(pollTimer);
-      pollScript?.remove();
-      iframe.remove();
-      form.remove();
-    };
-    const timeout = window.setTimeout(() => {
-      pendingBroadcasts.delete(nonce);
-      cleanup();
-      toast("No response from Google Apps Script. Check deployment access and try again.", true);
-      resolve(false);
-    }, 90_000);
-    pendingBroadcasts.set(nonce, {
-      complete(response) {
-        pendingBroadcasts.delete(nonce);
-        cleanup();
-        if (!response.ok) {
-          toast(`Push notification failed: ${response.message}`, true);
-          resolve(false);
-          return;
-        }
-        toast(`${response.message} ${response.recipients} recipient(s).`);
-        resolve(true);
-      },
-    });
-    const checkStatus = () => {
-      if (pollScript?.isConnected) return;
-      pollScript = document.createElement("script");
-      pollScript.src = `${endpoint}?callback=a2morningBroadcastStatus&status=${encodeURIComponent(nonce)}`;
-      pollScript.async = true;
-      pollScript.onerror = () => {
-        pollScript?.remove();
-        pollScript = null;
-      };
-      pollScript.onload = () => {
-        pollScript?.remove();
-        pollScript = null;
-      };
-      document.head.append(pollScript);
-    };
-    pendingBroadcasts.get(nonce).checkStatus = checkStatus;
-    pollTimer = window.setInterval(checkStatus, 2000);
-    try {
-      form.submit();
-      window.setTimeout(checkStatus, 1000);
-    } catch (error) {
-      pendingBroadcasts.delete(nonce);
-      cleanup();
-      toast(`Could not contact Google Apps Script: ${error.message}`, true);
-      resolve(false);
+}
+
+async function sendPushBroadcast(heading, message, { subscriptionId = "", silent = false } = {}) {
+  try {
+    let result;
+    if (subscriptionId) {
+      result = await onesignalToPlayerIds([subscriptionId], heading, message);
+    } else {
+      result = await onesignalBroadcast(heading, message);
     }
+    const recipients = result?.recipients ?? (subscriptionId ? 1 : "all");
+    if (!silent) toast(`Push notification sent to ${recipients} recipient(s).`);
+    return true;
+  } catch (error) {
+    if (!silent) toast(`Push notification failed: ${error.message}`, true);
+    return false;
+  }
+}
+
+function closeBroadcastSession() {
+  void requestBroadcast("logout").catch((error) => {
+    console.warn(`Could not close the notification session: ${error.message}`);
   });
 }
-
-window.a2morningBroadcastStatus = (response) => {
-  if (!response || typeof response.nonce !== "string") return;
-  const pending = pendingBroadcasts.get(response.nonce);
-  if (!pending) return;
-  if (response.pending) return;
-  if (response.version !== BROADCAST_SENDER_VERSION) {
-    pending.complete({
-      ok: false,
-      message: "The Apps Script deployment is outdated. Open its /exec URL and verify version " + BROADCAST_SENDER_VERSION + ", then deploy a new version.",
-    });
-    return;
-  }
-  if (typeof response.ok !== "boolean") {
-    pending.complete({ ok: false, message: "Google Apps Script returned an invalid status." });
-    return;
-  }
-  pending.complete(response);
-};
 
 function requestPath(request) {
   const match = String(request.id).match(/^(WR|DR)-(.+)$/);
@@ -2737,11 +3345,16 @@ async function resolvePaymentRequest(requestId, status) {
     toast("Cannot approve this request because the player account is missing.", true);
     return;
   }
-  if (status === "Refunded" && (request.kind !== "Withdrawal" || !request.balanceDeducted || !target)) {
+  if (status === "Cancelled" && request.kind !== "Withdrawal") {
+    toast("Only withdrawal requests can be cancelled.", true);
+    return;
+  }
+  if ((status === "Refunded" || (status === "Cancelled" && request.balanceDeducted))
+    && (request.kind !== "Withdrawal" || !request.balanceDeducted || !target)) {
     toast("This withdrawal cannot be refunded because its reserved balance is unavailable.", true);
     return;
   }
-  if (!["Approved", "Rejected", "Refunded"].includes(status)) return;
+  if (!["Approved", "Rejected", "Refunded", "Cancelled"].includes(status)) return;
 
   requestsInProgress.add(requestId);
   render();
@@ -2762,9 +3375,13 @@ async function resolvePaymentRequest(requestId, status) {
     if (status === "Approved" && request.kind === "Deposit") {
       const outcome = await adjustRequestBalanceOnce(request, target, "deposit", request.amount);
       if (outcome.alreadyApplied) toast("This deposit was already credited; the request status will now be synchronized.");
-    } else if (status === "Refunded") {
+    } else if (status === "Refunded" || (status === "Cancelled" && request.balanceDeducted)) {
       const outcome = await adjustRequestBalanceOnce(request, target, "refund", request.amount);
-      if (outcome.alreadyApplied) toast("This withdrawal was already refunded; the request status will now be synchronized.");
+      if (outcome.alreadyApplied) {
+        toast(status === "Cancelled"
+          ? "The reserved balance was already returned; the request status will now be synchronized."
+          : "This withdrawal was already refunded; the request status will now be synchronized.");
+      }
     } else if (status === "Approved" && request.kind === "Withdrawal" && !request.balanceDeducted) {
       await adjustRequestBalanceOnce(request, target, "withdrawal", -request.amount);
     } else if (status === "Approved" && request.kind === "Withdrawal") {
@@ -2794,7 +3411,12 @@ async function resolvePaymentRequest(requestId, status) {
         date: new Date().toLocaleString(),
         note: "Approved withdrawal request",
       });
-    } else if (status === "Refunded") {
+      void notifyUserByPhone(
+        target.mobile,
+        `Withdawal :- ${money(request.amount)} by Sridevi Matka`,
+        `Your withdrawal of ${money(request.amount)} was approved.`
+      ).catch(err => console.warn("Withdrawal push failed", err));
+    } else if (status === "Refunded" || (status === "Cancelled" && request.balanceDeducted)) {
       data.transactions.unshift({
         id: `T-${Date.now()}-${safeMarkerKey(request.id)}`,
         player: target.name,
@@ -2802,7 +3424,7 @@ async function resolvePaymentRequest(requestId, status) {
         type: "Added",
         amount: request.amount,
         date: new Date().toLocaleString(),
-        note: "Refunded reserved withdrawal request",
+        note: status === "Cancelled" ? "Cancelled withdrawal request; reserved balance returned" : "Refunded reserved withdrawal request",
       });
     }
     persist(`Request ${status.toLowerCase()}.`);
@@ -2864,6 +3486,15 @@ document.addEventListener("click", (event) => {
     case "add-player": playerModal(); break;
     case "edit-player": if (player) playerModal(player); break;
     case "player-credit": if (player) creditModal(player); break;
+    case "set-player-webplay":
+      void setPlayerWebPlayAccess(control.dataset.mobile, control.dataset.enabled === "true");
+      break;
+    case "toggle-global-webplay":
+      if (globalWebPlayAccessEnabled !== null) {
+        if (!globalWebPlayAccessEnabled && !window.confirm("Enabling global WebPlay access lets every signed-in app user open WebPlay, even if their individual WV tag is false. Continue?")) break;
+        void setGlobalWebPlayAccess(!globalWebPlayAccessEnabled);
+      }
+      break;
     case "edit-bid": editBidModal(data.bets.find((bet) => bet.id === id)); break;
     case "toggle-player":
       if (player) {
@@ -2872,11 +3503,20 @@ document.addEventListener("click", (event) => {
         render();
       }
       break;
+    case "delete-player":
+      if (player && window.confirm(`Permanently delete ${player.name} (${player.mobile}) and all stored player data, including bids, transactions, payment requests, and signup records? This cannot be undone.`)) {
+        void deletePlayerAccount(player);
+      }
+      break;
     case "resolve-request": {
       const request = data.requests.find((item) => item.id === id);
       if (!request || request.status !== "Pending") break;
       const status = control.dataset.status;
       if (status === "Refunded" && !window.confirm(`Refund ${money(request.amount)} to ${request.player} and close this withdrawal?`)) break;
+      if (status === "Cancelled") {
+        const refundMessage = request.balanceDeducted ? ` The reserved ${money(request.amount)} will be returned to the player's wallet.` : "";
+        if (!window.confirm(`Cancel this withdrawal request for ${request.player}?${refundMessage}`)) break;
+      }
       void resolvePaymentRequest(id, status);
       break;
     }
@@ -2932,7 +3572,7 @@ document.addEventListener("click", (event) => {
       const selectedMarket = data.markets.find((item) => item.id === id);
       if (selectedMarket) {
         resultMarketSelection = selectedMarket.id;
-        resultSessionSelection = control.dataset.session || "Open";
+        resultSessionSelection = normalizedResultSession(control.dataset.session) || "Open";
         resultDateSelection = control.dataset.date || localDateKey();
         const components = resultComponents(control.dataset.result);
         resultPanelDraft = resultSessionSelection === "Close" ? components.closePanel : components.openPanel;
@@ -2972,6 +3612,11 @@ document.addEventListener("click", (event) => {
       break;
     case "broadcast": publishBroadcast(); break;
     case "configure-broadcast": configureBroadcastSender(); break;
+    case "test-broadcast":
+      void onesignalBroadcast("Sridevi Matka", "Test broadcast from admin.")
+        .then(() => toast("Test broadcast sent."))
+        .catch(err => toast(`Test broadcast failed: ${err.message}`, true));
+      break;
     case "close-modal": document.getElementById("modal-root").innerHTML = ""; break;
     default: break;
   }
@@ -3000,16 +3645,18 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
   submitButton.querySelector("span").textContent = "Verifying…";
   errorElement.textContent = "";
   try {
-    const senderCredentials = await verifyAdminLogin(phone, password);
-    if (senderCredentials.endpoint && senderCredentials.token.length >= 24) {
-      localStorage.setItem(BROADCAST_ENDPOINT_KEY, senderCredentials.endpoint);
-      localStorage.setItem(BROADCAST_TOKEN_KEY, senderCredentials.token);
+    const adminCredentials = await verifyAdminLogin(phone, password);
+    try {
+      await establishBroadcastSession(phone, password);
+    } catch (error) {
+      console.warn(`Could not initialize the OneSignal notification session: ${error.message}`);
+      toast("Admin signed in, but push notifications are unavailable until the server sender is configured.", true);
     }
     localStorage.setItem(ADMIN_SESSION_KEY, "verified");
-    localStorage.setItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY, senderCredentials.credentialFingerprint);
+    localStorage.setItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY, adminCredentials.credentialFingerprint);
     establishAdminHistory();
     setAdminAppVisible(true);
-    monitorAdminPassword(senderCredentials.credentialFingerprint);
+    monitorAdminPassword(adminCredentials.credentialFingerprint);
     document.getElementById("today-date").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
     setConnectionStatus("Connecting…", "Live updates", "connecting");
     document.getElementById("page-content").innerHTML = `<div class="panel empty-state">Loading admin data…</div>`;
@@ -3099,6 +3746,21 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.id === "request-date") {
+    const date = event.target.value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      requestDateSelection = date;
+      render();
+    }
+  }
+  if (event.target.id === "activity-date") {
+    const date = event.target.value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      resultDateSelection = date;
+      resultPanelDraft = "";
+      render();
+    }
+  }
   if (event.target.id === "portal-player") {
     selectedPlayerId = event.target.value;
     betSlip = [];
@@ -3108,6 +3770,18 @@ document.addEventListener("change", (event) => {
     const type = gameTypes.find(([name]) => name === event.target.value);
     const number = document.getElementById("bet-number");
     if (number && type) number.placeholder = type[1];
+  }
+  if (event.target.id === "bet-session") {
+    const typeSelect = document.getElementById("bet-type");
+    const fullSangam = typeSelect && Array.from(typeSelect.options).find((option) => option.value === "Full Sangam");
+    if (fullSangam) {
+      fullSangam.disabled = event.target.value !== "Open";
+      if (fullSangam.disabled && typeSelect.value === "Full Sangam") {
+        typeSelect.value = "Single Digit";
+        const number = document.getElementById("bet-number");
+        if (number) number.placeholder = gameTypes.find(([name]) => name === typeSelect.value)[1];
+      }
+    }
   }
   if (event.target.id === "player-status-filter") {
     playerStatusFilter = event.target.value;
@@ -3167,6 +3841,10 @@ document.addEventListener("submit", (event) => {
     }
     if (!(session === "Open" ? data.settings.openBets : data.settings.closeBets)) {
       toast(`The ${session.toLowerCase()} session is currently disabled.`, true);
+      return;
+    }
+    if (type === "Full Sangam" && session !== "Open") {
+      toast("Full Sangam is available only during the Open session.", true);
       return;
     }
     if (!isValidGameNumber(type, number)) {
@@ -3231,10 +3909,10 @@ document.addEventListener("submit", (event) => {
       return;
     }
     const otherSession = session === "Open" ? "Close" : "Open";
-    const baseResult = (market.results || []).find((item) => item.date === date && item.session === otherSession)?.result
-      || (market.results || []).find((item) => item.date === date && item.session === session)?.result
-      || (market.results || []).find((item) => item.date === date && !item.session)?.result
-      || market.result;
+    const sameDayResults = marketResultsForDate(market, date);
+    const baseResult = sameDayResults.find((item) => normalizedResultSession(item.session) === otherSession)?.result
+      || sameDayResults.find((item) => normalizedResultSession(item.session) === session)?.result
+      || sameDayResults.find((item) => !item.session)?.result;
     const result = buildMarketResult(market, session, panel, baseResult);
     if (!result) {
       toast("The result could not be calculated from this panel.", true);
@@ -3254,7 +3932,10 @@ document.addEventListener("submit", (event) => {
       } catch (error) {
         toast(`Result was saved to the admin database, but chart sync failed: ${error.message}`, true);
       }
-      if (resultChanged) return sendPushBroadcast(market.name, `${session} result: ${result} · ${date}`);
+      if (resultChanged) return sendPushBroadcast(
+        `${market.name.toUpperCase()} result updated`,
+        `${session}: ${result} · ${date}`
+      );
       return false;
     });
     render();
@@ -3278,6 +3959,8 @@ document.addEventListener("submit", (event) => {
     const form = new FormData(event.target);
     const signUpBonus = Number(form.get("signUpBonus"));
     const minimumDeposit = Number(form.get("minimumDeposit"));
+    const paymentGatewayEnabled = form.get("paymentGatewayEnabled") === "on";
+    const paymentGatewayUrl = String(form.get("paymentGatewayUrl") || "").trim();
     const minimumWithdrawal = Number(form.get("minimumWithdrawal"));
     const minimumEntry = Number(form.get("minimumEntry"));
     const maximumEntry = Number(form.get("maximumEntry"));
@@ -3297,9 +3980,44 @@ document.addEventListener("submit", (event) => {
       toast("Check the non-negative settings, bid limits, and both withdrawal windows. Each opening time must differ from its closing time.", true);
       return;
     }
+    if (paymentGatewayEnabled) {
+      let gatewayUrl;
+      try {
+        gatewayUrl = new URL(paymentGatewayUrl);
+      } catch {
+        toast("Enter a valid HTTPS payment gateway API URL before enabling gateway payments.", true);
+        return;
+      }
+      if (gatewayUrl.protocol !== "https:") {
+        toast("The payment gateway API URL must use HTTPS.", true);
+        return;
+      }
+    }
+    const upiUrlTemplate = String(form.get("upiUrlTemplate") || "").trim();
+    if (upiUrlTemplate) {
+      let paymentUrl;
+      try {
+        paymentUrl = new URL(upiUrlTemplate.replace(/###/g, "1"));
+      } catch {
+        toast("Enter a valid upi://pay link for the Admin Upi template.", true);
+        return;
+      }
+      if (paymentUrl.protocol !== "upi:" || paymentUrl.hostname !== "pay" ||
+          !paymentUrl.searchParams.get("pa")) {
+        toast("The Admin Upi template must be a upi://pay link with a payee ID.", true);
+        return;
+      }
+    }
     Object.assign(data.settings, {
       signUpBonus,
       minimumDeposit,
+      qrCodeEnabled: form.get("qrCodeEnabled") === "on",
+      directPaymentEnabled: form.get("directPaymentEnabled") === "on",
+      paymentGatewayEnabled,
+      qrCode: String(form.get("qrCode") || "").trim(),
+      upiId: String(form.get("upiId") || "").trim(),
+      upiUrlTemplate,
+      paymentGatewayUrl,
       minimumWithdrawal,
       minimumEntry,
       maximumEntry,
@@ -3307,6 +4025,8 @@ document.addEventListener("submit", (event) => {
       withdrawalWindowsConfigured: true,
       withdrawTiming: String(form.get("withdrawTiming") || "").trim(),
       websiteUrl: String(form.get("websiteUrl") || "").trim(),
+      matka60Url: String(form.get("matka60Url") || "").trim(),
+      matka30Url: String(form.get("matka30Url") || "").trim(),
       resultChartUrl: String(form.get("resultChartUrl") || "").trim(),
       contactUrl: String(form.get("contactUrl") || "").trim(),
       telegramUrl: String(form.get("telegramUrl") || "").trim(),
@@ -3329,6 +4049,32 @@ document.addEventListener("submit", (event) => {
     }).finally(() => {
       if (submit) submit.disabled = false;
     });
+  }
+  if (event.target.id === "push-broadcast-form") {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const title = String(form.get("title") || "").trim();
+    const message = String(form.get("message") || "").trim();
+    if (!title || !message) return toast("Enter title and message.", true);
+    void onesignalBroadcast(title, message)
+      .then(() => toast("Broadcast sent."))
+      .catch(err => toast(`Broadcast failed: ${err.message}`, true));
+    return;
+  }
+  if (event.target.id === "push-user-form") {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const mobile = String(form.get("mobile") || "").trim();
+    const title = String(form.get("title") || "").trim();
+    const message = String(form.get("message") || "").trim();
+    if (!mobile || !title || !message) return toast("Select a player and enter title and message.", true);
+    void notifyUserByPhone(mobile, title, message)
+      .then(res => {
+        if (res?.skipped) toast("No push id for this player on daily-market-hub.", true);
+        else toast("Notification sent to player.");
+      })
+      .catch(err => toast(`Send failed: ${err.message}`, true));
+    return;
   }
   if (event.target.id === "notice-form") {
     event.preventDefault();
@@ -3362,6 +4108,13 @@ function startRealtimeSync() {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     databaseRootRef = firebase.database().ref();
     databaseRef = databaseRootRef.child("adminData");
+    try {
+      watchGlobalWebPlayAccess();
+    } catch (error) {
+      globalWebPlayAccessEnabled = null;
+      globalWebPlayAccessError = error.message || "Could not connect to a2moring.";
+      toast(`Could not monitor global WebPlay access: ${globalWebPlayAccessError}`, true);
+    }
     let initializingDatabase = false;
     databaseRootRef.on("value", (snapshot) => {
       const root = snapshot.val() || {};
@@ -3449,6 +4202,8 @@ if (localStorage.getItem(ADMIN_SESSION_KEY) === "verified") {
       }
     })();
   }
+} else {
+  setAdminAppVisible(false);
 }
 
 window.addEventListener("storage", (event) => {
