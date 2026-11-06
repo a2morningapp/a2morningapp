@@ -1,15 +1,13 @@
-# Gateway payment website
+# Sridevi Matka Cafe Website
 
-This folder contains the browser version of the Android gateway payment demo. It creates an order, opens the returned HTTPS checkout page, and checks order status when the user returns or presses **Check payment status**.
+This is a standalone static website copy of the Sridevi Matka app. It keeps the existing HTML, CSS, colors, layouts, and browser-side interactions, and includes the market results page.
 
-The website folder is flat: keep `index2.html` and this README together. There is no server API or Vercel function. The page asks the user for a gateway API token at runtime and sends form-encoded requests directly to `https://payment.happysatta.com/api/create-order` and `/check-order-status`.
+Upload the contents of this folder to a static web host with `index2.html` as the player entry point. Firebase's browser SDKs are loaded from Google's CDN. The copied admin console is in [`Sridevi Matka Admin`](./Sridevi%20Matka%20Admin/).
 
-## Run the website
+The main site uses the supplied Sridevi Matka Firebase configuration. `result.html` uses the supplied Sridevi Matka web-result Firebase configuration.
 
-Upload `index2.html` to any HTTPS static web host and open it from that host. Opening it directly from disk (`file://`) or over plain HTTP is not supported for payment requests. A static host cannot work around the browser's cross-origin restrictions: the gateway must allow CORS requests from the website's origin. If the browser reports a CORS/network error, ask the gateway operator to enable CORS for the hosted domain or use an API proxy on a server you control.
+Bet entry uses the site's existing browser-side Firebase write path. Number, session, amount, and wallet checks in this flow are client-side; this path does not provide authoritative server validation, atomic balance deduction, or cross-device duplicate protection. The betting grid intentionally reuses the existing market rules and bid/history records. Run its focused checks from this folder with `node --test tests\betting-grid.test.cjs`.
 
-The token is not saved by the page; enter it again after reloading. Since the browser sends the token directly to the gateway, it is visible to the person using browser developer tools. Never enter a production merchant token in a public page. Use only a rotated test credential.
+Gateway deposits require `payment-backend/hostinger/payment-api.php` on a PHP-capable host and `Admin/Admin/payment_api_url` set to its HTTPS URL. Checkout is displayed in an in-page iframe; the configured gateway must allow iframe embedding. Keep `sridevi-payment-config.json` and `sridevi-mysql-config.json` in the private directory expected by the endpoint, outside the public web root.
 
-The supplied `javascript.zip` examples use a different gateway host (`khilaadixpro.shop`) and contain example credentials. This site follows the HappySatta API host and payload shown in the supplied documentation screenshots instead; do not copy example credentials into this project.
-
-A return URL is only a browser destination. The supplied documentation does not define a webhook callback contract, so this site does not claim to implement a webhook. Gateway order creation may lead to a real payment; test with a rotated test token and a non-production gateway account.
+The admin console also contains a PHP endpoint for OneSignal broadcasts; that endpoint needs a PHP-capable host and its allowed-host list configured for the deployed website domain.

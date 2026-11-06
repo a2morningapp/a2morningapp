@@ -3,66 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f8f6ec">
-  <title>A2 MORNING</title>
+  <meta name="theme-color" content="#fff0fb">
+  <title>Sridevi Matka</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="web-styles.css?v=matka60-test-settlement-v1">
-  <link rel="stylesheet" href="web-native-app.css">
+  <link rel="stylesheet" href="styles.css?v=mobile-ux-1">
+  <link rel="stylesheet" href="sridevi-matka-theme.css?v=readability-6">
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-auth.js"></script>
-  <script src="web-app.js?v=matka60-previous-result-gate-v1" defer></script>
+  <script src="site-app.webjs?v=readability-6" defer></script>
 </head>
 <body>
-  <section id="startup-view" class="startup-view" role="status" aria-live="polite">
-    <img src="web-a2morning.png" alt="" class="startup-logo">
-    <strong>A2 MORNING</strong>
-    <span class="startup-spinner" aria-hidden="true"></span>
-    <p id="startup-message">Checking your account…</p>
-    <button id="startup-retry" class="button button-secondary hidden" type="button">Try again</button>
-  </section>
-  <main id="auth-view" class="auth-shell hidden">
-    <section class="auth-brand">
-      <a class="brand-lockup" href="#" aria-label="A2 MORNING home">
-        <img src="web-a2morning.png" alt="" class="brand-logo">
-        <span><strong>A2 MORNING</strong><small>MATKA</small></span>
-      </a>
-      <div class="brand-copy">
-        <p class="eyebrow">WELCOME TO A2 MORNING</p>
-        <h1>Your games.<br><span>Your numbers.</span></h1>
-        <p>One place for market updates, game charts and your points activity.</p>
+  <main id="auth-view" class="auth-shell">
+    <section id="language-view" class="language-screen hidden" aria-labelledby="language-title">
+      <header class="language-heading">
+        <img src="a2morning-logo.png" alt="A2 Morning" class="welcome-logo">
+        <h1 id="language-title">Choose your language</h1>
+        <p id="language-description">Select your preferred language to continue.</p>
+      </header>
+      <div id="language-options" class="language-options" role="radiogroup" aria-labelledby="language-title"></div>
+      <div class="language-actions">
+        <button class="welcome-primary" id="language-continue" type="button">Continue <span aria-hidden="true">→</span></button>
       </div>
-      <div class="brand-foot"><span class="live-dot"></span> Your matka dashboard, reimagined</div>
     </section>
-    <section class="auth-panel">
-      <div class="auth-card">
-        <div class="mobile-brand">
-          <img src="web-a2morning.png" alt="" class="brand-logo">
-          <strong>A2 MORNING</strong>
-        </div>
-        <p class="eyebrow" id="auth-eyebrow">YOUR ACCOUNT</p>
-        <h2 id="auth-title">Welcome back</h2>
-        <p class="muted" id="auth-subtitle">Sign in with your phone number and password.</p>
+    <section id="auth-screen" class="welcome-screen hidden" aria-labelledby="auth-title">
+      <header class="welcome-heading">
+        <img src="a2morning-logo.png" alt="A2 Morning" class="welcome-logo">
+      </header>
+      <section class="auth-card">
+        <h1 id="auth-title">Welcome to Sridevi Matka</h1>
+        <p class="auth-subtitle" id="auth-subtitle">Sign in with your phone number and password.</p>
         <div class="auth-tabs" role="tablist" aria-label="Account access">
-          <button class="auth-tab" type="button" data-auth-mode="login">Sign in</button>
-          <button class="auth-tab active" type="button" data-auth-mode="signup">Create account</button>
+          <button class="auth-tab active" type="button" data-auth-mode="login" role="tab">Sign in</button>
+          <button class="auth-tab" type="button" data-auth-mode="signup" role="tab">Create account</button>
         </div>
-        <form id="auth-form" class="form-stack">
-          <label id="name-field" class="field">Full name
+        <form id="auth-form" class="form-stack" novalidate>
+          <label class="welcome-input-label">
+            <span id="auth-phone-label">Mobile number</span>
+            <span class="welcome-input-wrap"><span class="input-prefix">+91</span><input id="auth-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="Enter your mobile number" required></span>
+          </label>
+          <label id="name-field" class="welcome-input-label hidden">
+            <span id="auth-name-label">Your name</span>
             <input id="auth-name" name="name" type="text" autocomplete="name" maxlength="60" placeholder="Enter your name">
           </label>
-          <label class="field">Phone number
-            <span class="input-wrap"><span class="input-prefix">+91</span><input id="auth-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit mobile number" required></span>
+          <label class="welcome-input-label">
+            <span>Password</span>
+            <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required>
           </label>
-          <label class="field">Password
-            <input id="auth-password" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
-          </label>
-          <button class="auth-forgot-link hidden" id="forgot-password-button" type="button" data-action="forgot-password">Forgot password?</button>
-          <button class="button button-primary button-wide" id="auth-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
+          <button class="auth-back-button hidden" id="forgot-password-button" type="button" data-action="forgot-password">Forgot password?</button>
+          <button class="welcome-primary" id="auth-submit" type="submit">Continue <span aria-hidden="true">→</span></button>
+          <label class="auth-consent"><input id="auth-consent-checkbox" type="checkbox" name="ageConsent" checked required><span><span id="auth-consent-prefix">I agree to the</span> <button class="inline-policy-link" type="button" data-action="open-auth-policy">Privacy Policy</button> <span id="auth-consent-suffix">and confirm I am 18 or older.</span></span></label>
         </form>
-      </div>
+        <button class="auth-help-link" type="button" data-action="open-contact">Need help? Contact us</button>
+        <p class="welcome-security"><span aria-hidden="true">⌑</span> <span id="auth-security-copy">Use a number you control to access your account.</span></p>
+      </section>
+      <footer class="welcome-footer">
+        <span class="welcome-footer-line"></span>
+        <strong id="auth-footer-copy">Trusted by thousands of players</strong>
+        <span class="trusted-player-icons" aria-hidden="true">
+          <span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2z"/></svg></span>
+          <span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2z"/></svg></span>
+          <span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2z"/></svg></span>
+          <span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2z"/></svg></span>
+          <b>MH</b>
+        </span>
+        <small class="welcome-secured"><span aria-hidden="true">♙</span> Secured access · 18+ only</small>
+      </footer>
     </section>
     <button class="auth-whatsapp-button hidden" id="auth-whatsapp-button" type="button" data-action="auth-whatsapp" aria-label="Chat with us on WhatsApp" title="Chat with us on WhatsApp"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3.5a12 12 0 0 0-10.3 18.2L4 28l6.5-1.7A12 12 0 1 0 16 3.5Z"/><path d="M12.2 10.5c-.4-.8-.8-.8-1.2-.8h-.9c-.3 0-.8.1-1.2.6s-1.6 1.6-1.6 3.8 1.6 4.4 1.8 4.7 3.1 5 7.5 6.8c3.7 1.5 4.5 1.2 5.3 1.1s2.5-1 2.9-2 .4-1.9.3-2.1-.4-.3-.9-.6l-3-1.5c-.4-.2-.7-.3-1 .2s-1.1 1.5-1.4 1.8-.5.3-1 .1a12.7 12.7 0 0 1-3.7-2.3 13.8 13.8 0 0 1-2.5-3.1c-.3-.5 0-.7.2-.9l.7-.8c.2-.3.3-.5.5-.8s.1-.6 0-.8l-1.2-3.4Z"/></svg></button>
   </main>
@@ -70,10 +77,11 @@
   <div id="app-view" class="app-shell hidden">
     <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close navigation"></button>
     <aside class="sidebar" id="sidebar">
-      <a class="sidebar-brand" href="#" data-page="home">
-        <img src="web-a2morning.png" alt="" class="brand-logo">
-        <span><strong>A2 MORNING</strong><small>MATKA</small></span>
-      </a>
+      <button class="sidebar-profile" type="button" data-page="profile">
+        <span class="sidebar-profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4.3 4.3 0 1 0 0-8.6 4.3 4.3 0 0 0 0 8.6Zm-8 9a8 8 0 0 1 16 0"/></svg></span>
+        <span class="sidebar-profile-copy"><strong id="drawer-user-name">Player</strong><small>Balance: <b id="drawer-user-balance">₹ 0</b></small></span>
+        <span class="sidebar-profile-chevron" aria-hidden="true">›</span>
+      </button>
       <nav class="side-nav" aria-label="Main navigation">
         <div class="nav-caption">MENU</div>
         <button class="nav-link active" type="button" data-page="home"><span class="nav-icon" aria-hidden="true">🏠</span>Home</button>
@@ -85,8 +93,7 @@
         <div class="nav-caption nav-caption-spaced">MORE</div>
         <button class="nav-link" type="button" data-page="notices"><span class="nav-icon" aria-hidden="true">📢</span>Emergency Notice</button>
         <button class="nav-link" type="button" data-page="rates"><span class="nav-icon" aria-hidden="true">🏷️</span>Market Rates</button>
-        <button class="nav-link" type="button" data-action="share-app"><span class="nav-icon" aria-hidden="true">🔗</span>Share Our App</button>
-        <button class="nav-link" type="button" data-action="change-password"><span class="nav-icon" aria-hidden="true">🔑</span>Change Password</button>
+        <button class="nav-link" type="button" data-action="open-contact"><span class="nav-icon" aria-hidden="true">✉</span>Contact support</button>
         <button class="nav-link" type="button" data-page="policy"><span class="nav-icon" aria-hidden="true">⚠️</span>Privacy &amp; Policy</button>
         <button class="nav-link" type="button" data-action="open-results-website"><span class="nav-icon" aria-hidden="true">🌐</span>Website</button>
         <button class="nav-link nav-link-logout" id="logout-button" type="button"><span class="nav-icon" aria-hidden="true">⚡</span>Log Out</button>
@@ -98,11 +105,14 @@
 
     <section class="main-column">
       <header class="topbar">
-        <button class="icon-button mobile-menu" id="menu-toggle" type="button" aria-label="Open navigation">☰</button>
-        <div class="aia-mobile-brand"><img src="web-a2morning.png" alt=""><strong>A2 MORNING</strong><span class="aia-online"><i></i>ACTIVE</span></div>
-        <div class="aia-mobile-balance"><img src="web-icon-coin.png" alt=""><strong id="aia-header-balance">₹ 0</strong></div>
+        <button class="icon-button mobile-menu" id="menu-toggle" type="button" data-drawer-toggle aria-label="Open navigation">☰</button>
+        <div class="aia-mobile-brand" aria-label="A2 Morning">
+          <img src="a2morning-logo.png" alt="A2 Morning">
+        </div>
+        <button class="aia-mobile-balance" type="button" data-page="points" aria-label="Wallet balance. Open points history."><img src="icon-coin.png" alt=""><span>Balance</span><strong id="aia-header-balance">₹ 0</strong></button>
         <button class="aia-mobile-notices" type="button" data-page="notices" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
-        <div class="breadcrumb"><span>A2 MORNING</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
+        <button class="aia-mobile-support" type="button" data-action="open-contact" aria-label="Contact support"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></button>
+        <div class="breadcrumb"><span>Sridevi Matka</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
         <div class="top-actions">
           <button class="icon-button notice-button" type="button" data-page="notices" aria-label="Notices">♧<span class="notification-dot"></span></button>
           <button class="user-chip" type="button" data-page="profile"><span class="avatar" id="header-avatar">K</span><span class="user-chip-copy"><strong id="header-name">Player</strong><small>My account</small></span><span class="chevron">⌄</span></button>
@@ -110,28 +120,38 @@
       </header>
       <div class="content-wrap">
         <div id="page-content"></div>
-        <footer class="page-footer"><span>© <span id="current-year"></span> A2 MORNING</span><span>Play responsibly · 18+</span></footer>
+        <footer class="page-footer"><span>© <span id="current-year"></span> Sridevi Matka</span><span>18+ · Play responsibly</span></footer>
       </div>
     </section>
     <nav class="mobile-bottom-nav" aria-label="App navigation">
-      <button type="button" data-page="points" aria-label="Points"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></svg></span><small>Points</small></button>
-      <button type="button" data-page="bids" aria-label="Bids"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v6h6M9 13h6m-6 4h6"/></svg></span><small>Bids</small></button>
-      <button class="aia-game-nav active" type="button" data-page="markets" aria-label="Games"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 8.5h9.6a4.2 4.2 0 0 1 4 3l1 3.7a2.2 2.2 0 0 1-3.5 2.3l-2.1-1.7H7.8l-2.1 1.7a2.2 2.2 0 0 1-3.5-2.3l1-3.7a4.2 4.2 0 0 1 4-3Z"/><path d="M7.5 10.8v4m-2-2h4m7.3-.5h.1m2 2h.1"/></svg></span><small>Games</small></button>
-      <button type="button" data-page="deposit" aria-label="Wallet"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5h15a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h13v4"/><path d="M16 12.5h5m-4 0h.1"/></svg></span><small>Wallet</small></button>
-      <button type="button" data-page="support" aria-label="Support"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></span><small>Support</small></button>
+      <button type="button" data-page="bids" aria-label="My Bid"><span aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="12" cy="10" r="5"/><circle cx="23" cy="14" r="5"/><path d="M4 27v-3a8 8 0 0 1 16 0v3M17 27v-2a6 6 0 0 1 11 0v2M10 8h4m-2-2v8m9-2h4m-2-2v8"/></svg></span><small>My Bid</small></button>
+      <button type="button" data-page="points" aria-label="History"><span aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M7 10a12 12 0 1 1-1 13M7 5v7h7M16 9v8l5 3"/></svg></span><small>History</small></button>
+      <button class="aia-game-nav" type="button" data-page="home" aria-label="Games"><span aria-hidden="true"><img src="a2morning-logo.png" alt=""></span><small>Games</small></button>
+      <button type="button" data-page="deposit" aria-label="Fund"><span aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M4 12 16 5l12 7H4ZM7 14v11m6-11v11m6-11v11m6-11v11M4 28h24M3 12h26"/></svg></span><small>Fund</small></button>
+      <button type="button" data-action="open-contact" aria-label="Contact us"><span aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 17a11 11 0 0 1 22 0v7a3 3 0 0 1-3 3h-4v-9h7M5 17H2v7a3 3 0 0 0 3 3h4v-9H5Zm4 10a7 7 0 0 0 7 4h3"/></svg></span><small>Contact Us</small></button>
     </nav>
   </div>
   <section id="exit-dialog" class="exit-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="exit-dialog-title">
     <div class="exit-dialog-card">
       <button class="exit-dialog-close" type="button" data-action="exit-dialog-close" aria-label="Close dialog">×</button>
       <span class="exit-dialog-icon" aria-hidden="true">↩</span>
-      <h2 id="exit-dialog-title">Leave A2 MORNING?</h2>
+      <h2 id="exit-dialog-title">Leave Sridevi Matka?</h2>
       <p>Are you sure you want to close the application?</p>
       <div class="exit-dialog-actions">
         <button class="exit-dialog-cancel" type="button" data-action="exit-dialog-cancel">No, stay</button>
         <button class="exit-dialog-confirm" type="button" data-action="exit-dialog-confirm">Yes, close</button>
       </div>
     </div>
+  </section>
+  <section id="payment-viewer" class="payment-viewer hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="payment-viewer-title">
+    <header class="payment-viewer-header">
+      <div>
+        <h2 id="payment-viewer-title">Secure payment</h2>
+        <p>Complete payment here. Your points are added after gateway confirmation.</p>
+      </div>
+      <button class="payment-viewer-close" type="button" data-action="close-payment-viewer" aria-label="Close payment window">×</button>
+    </header>
+    <iframe id="payment-viewer-frame" title="Secure payment gateway" allow="payment; clipboard-write; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
   </section>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>

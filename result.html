@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#760900">
-  <title>Market Panel Chart | A2 MORNING</title>
+  <meta name="theme-color" content="#0c1d32">
+  <title>Market Panel Chart | Sridevi Matka</title>
   <style>
     :root {
       color-scheme: light;
       font-family: Arial, Helvetica, sans-serif;
       color: #171717;
-      background: #760900;
+      background: #0c1d32;
     }
     * { box-sizing: border-box; }
-    body { min-width: 320px; min-height: 100vh; margin: 0; background: #760900; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; background: #0c1d32; }
     .topbar {
       position: sticky;
       z-index: 2;
@@ -25,7 +25,7 @@
       min-height: 54px;
       padding: max(5px, env(safe-area-inset-top)) 13px 5px;
       color: #fff;
-      background: #760900;
+      background: #0c1d32;
     }
     .topbar button, .topbar a {
       display: grid;
@@ -34,7 +34,7 @@
       place-items: center;
       border: 0;
       border-radius: 50%;
-      color: #760900;
+      color: #0c1d32;
       background: #fff;
       font-size: 25px;
       line-height: 1;
@@ -106,6 +106,11 @@
     .chart-panel .jodi { letter-spacing: .18em; }
     .chart-panel .missing { color: #1c1c1c; font-weight: 500; }
     .chart-panel .updated { color: #bd2828; }
+    .chart-result-sessions { display: grid; gap: 5px; justify-items: center; }
+    .chart-result-session { display: grid; gap: 1px; justify-items: center; }
+    .chart-result-session small { color: #765400; font-size: 8px; font-weight: 800; letter-spacing: .08em; }
+    .chart-result-session strong { color: #222; font-size: clamp(10px, 3vw, 14px); letter-spacing: .08em; line-height: 1.15; }
+    .chart-result-session .updated { color: #bd2828; }
     .status {
       margin: 0;
       padding: 8px 11px;
@@ -135,11 +140,17 @@
       tbody th { font-size: 9px; }
       .chart-panel { gap: 1px; }
     }
+    :root { color: #17283a; background: #0c1d32; }
+    body { background: #0c1d32; }
+    .topbar { background: #0c1d32; }
+    .topbar button, .topbar a { color: #0c1d32; }
+    .chart-shell { border-color: #19a890; }
+    thead th { border-color: #19a890; color: #102740; background: #62d7bd; }
   </style>
 </head>
 <body>
   <header class="topbar">
-    <a href="index.html" aria-label="Back to A2 MORNING admin">‹</a>
+    <a href="/" aria-label="Back to Sridevi Matka">‹</a>
     <h1 id="chart-title">Market Panel Chart</h1>
     <button id="refresh-chart" type="button" aria-label="Refresh chart">↻</button>
   </header>
@@ -154,7 +165,7 @@
         </table>
       </div>
     </section>
-    <a class="site-link" href="index.html">A2 MORNING admin</a>
+    <a class="site-link" href="/">Sridevi Matka home</a>
   </main>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
@@ -239,6 +250,25 @@
       const values = parts.length ? parts : ["*", "**", "*"];
       const isCurrent = record && record.updatedAt
         && new Date(record.updatedAt).toDateString() === new Date().toDateString();
+      const openPanel = /^\d{3}$/.test(parts[0] || "") ? parts[0] : "";
+      const closePanel = /^\d{3}$/.test(parts[2] || "") ? parts[2] : "";
+      const jodi = /^(?:\d{2}|\d#|#\d)$/.test(parts[1] || "") ? parts[1] : "";
+      if (parts.length === 3 && jodi && (openPanel || closePanel)) {
+        const sessions = document.createElement("div");
+        sessions.className = "chart-result-sessions";
+        const open = document.createElement("div");
+        open.className = "chart-result-session";
+        appendText(open, "small", "OPEN");
+        appendText(open, "strong", `${openPanel || "###"} - ${/^\d/.test(jodi) ? jodi[0] : "#"}`, isCurrent ? "updated" : "");
+        const close = document.createElement("div");
+        close.className = "chart-result-session";
+        appendText(close, "small", "CLOSE");
+        appendText(close, "strong", `${/\d$/.test(jodi) ? jodi[jodi.length - 1] : "#"} - ${closePanel || "###"}`, isCurrent ? "updated" : "");
+        sessions.append(open, close);
+        day.append(sessions);
+        cell.append(day);
+        return cell;
+      }
       const panel = document.createElement("div");
       panel.className = "chart-panel";
       values.forEach((value, index) => {
