@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#14213d">
+    <meta name="description" content="A2 Morning Special Quiz">
+    <title>A2 Morning — Special Quiz</title>
+    <link rel="icon" href="./quiz-logo.png">
+    <link rel="stylesheet" href="./quiz-styles.css">
+    <script type="module" src="./quiz-app.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="dashboard" class="view dashboard-view" aria-labelledby="app-title">
+        <header class="app-header">
+          <img class="app-logo" src="./quiz-logo.png" alt="A2 Morning logo">
+          <div class="header-copy">
+            <p class="eyebrow">A2 MORNING</p>
+            <h1 id="app-title">Welcome<span id="player-name"></span></h1>
+            <p class="subtitle">Your daily quiz journey</p>
+          </div>
+          <div class="coin-badge" aria-label="Coin balance">
+            <span aria-hidden="true">●</span>
+            <strong id="coin-balance">0</strong>
+          </div>
+        </header>
+
+        <p id="session-note" class="session-note" role="status"></p>
+
+        <section class="quiz-card" aria-labelledby="quiz-title">
+          <span class="quiz-card-icon" aria-hidden="true">✦</span>
+          <h2 id="quiz-title">Special Quiz</h2>
+          <p>Get 5 coins for every right answer. Answer as many questions as you can before time runs out.</p>
+          <button id="start-button" class="primary-button" type="button">START</button>
+        </section>
+
+        <section class="options-section" aria-labelledby="options-title">
+          <h2 id="options-title">Options</h2>
+          <div class="options-list">
+            <button class="option-button" type="button" data-option="profile"><span aria-hidden="true">👤</span>My Profile<span aria-hidden="true">›</span></button>
+            <button class="option-button" type="button" data-option="password"><span aria-hidden="true">🔒</span>Password<span aria-hidden="true">›</span></button>
+            <button class="option-button" type="button" data-option="share"><span aria-hidden="true">↗</span>Share<span aria-hidden="true">›</span></button>
+            <button class="option-button" type="button" data-option="whatsapp"><span aria-hidden="true">☏</span>WhatsApp<span aria-hidden="true">›</span></button>
+            <button class="option-button" type="button" data-option="policy"><span aria-hidden="true">▤</span>Policy<span aria-hidden="true">›</span></button>
+            <button class="option-button logout-option" type="button" data-option="logout"><span aria-hidden="true">↪</span>Log Out<span aria-hidden="true">›</span></button>
+          </div>
+          <p id="option-message" class="option-message" role="status"></p>
+        </section>
+      </section>
+
+      <section id="option-view" class="view option-view" aria-labelledby="option-title" hidden>
+        <header class="option-header">
+          <button id="option-back-button" class="text-button" type="button">← Back</button>
+          <h2 id="option-title">My Profile</h2>
+          <span class="option-header-balance">● <strong id="option-coins">0</strong></span>
+        </header>
+        <p id="option-page-message" class="option-page-message" role="status"></p>
+        <div id="option-content" class="option-content"></div>
+      </section>
+
+      <section id="quiz" class="view quiz-view" aria-labelledby="question-text" hidden>
+        <div class="quiz-topbar">
+          <button id="back-button" class="text-button" type="button" aria-label="Back to dashboard">← Back</button>
+          <span class="quiz-brand">A2 MORNING</span>
+        </div>
+        <div class="quiz-stats" aria-live="polite">
+          <span>Question <strong id="question-count">0 / 0</strong></span>
+          <span>Correct <strong id="correct-count">0</strong></span>
+          <span class="timer" id="timer">Time Remaining: 150 Sec</span>
+        </div>
+        <article class="question-card">
+          <p id="question-number" class="question-number">QUESTION 1</p>
+          <h2 id="question-text"></h2>
+        </article>
+        <div id="answer-list" class="answer-list" role="group" aria-label="Answer choices"></div>
+        <p id="quiz-message" class="quiz-message" role="status"></p>
+      </section>
+
+      <section id="results" class="view results-view" aria-labelledby="results-title" hidden>
+        <div class="results-card">
+          <p class="eyebrow">A2 MORNING · SPECIAL QUIZ</p>
+          <h2 id="results-title">Quiz complete</h2>
+          <p class="results-score">Score <strong id="result-score">0 / 0</strong></p>
+          <dl class="results-stats">
+            <div><dt>Total questions</dt><dd id="result-total">0</dd></div>
+            <div><dt>Matches answered</dt><dd id="result-matches">0</dd></div>
+            <div><dt>Coins earned</dt><dd id="result-earned">+0</dd></div>
+            <div><dt>Current balance</dt><dd id="result-balance">0</dd></div>
+          </dl>
+          <p id="result-save-note" class="session-note"></p>
+          <button id="dashboard-button" class="primary-button" type="button">BACK TO DASHBOARD</button>
+          <button id="again-button" class="secondary-button" type="button">PLAY AGAIN</button>
+        </div>
+      </section>
+
+      <div id="logout-dialog" class="dialog-backdrop" hidden>
+        <section class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+          <h2 id="logout-title">Log Out</h2>
+          <p>Are you sure you want to log out?</p>
+          <div class="confirm-actions">
+            <button id="cancel-logout" class="dialog-cancel" type="button">No</button>
+            <button id="confirm-logout" class="dialog-confirm" type="button">Yes</button>
+          </div>
+        </section>
+      </div>
+
+      <div id="loading" class="loading-screen" role="status" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="loading-message">Loading quiz…</p>
+      </div>
+
+      <div id="error-panel" class="error-panel" role="alert" hidden>
+        <h2>Unable to continue</h2>
+        <p id="error-message"></p>
+        <button id="retry-button" class="primary-button" type="button">TRY AGAIN</button>
+        <button id="error-back-button" class="text-button" type="button">Back to dashboard</button>
+      </div>
+    </main>
+  </body>
+</html>
