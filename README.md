@@ -1,4 +1,4 @@
-# Sridevi Matka Admin
+# A2Morning Admin
 
 Deploy this folder's contents together to a static web host. Open `index.html` or `admin.html`; the console is configured to use the A2Morning Realtime Database and its separate web-result database. The OneSignal broadcast endpoint requires a PHP-capable host; add the deployed admin domain to the `$allowedHosts` list in `onesignal.php`.
 
@@ -24,7 +24,7 @@ Deploy `onesignal-sender.gs` as a Google Apps Script web app (execute as the own
 - `ONESIGNAL_REST_API_KEY`: the app's OneSignal REST API key; keep this secret on the server and never put it in this folder or the native app.
 - `BROADCAST_TOKEN`: a randomly generated secret with at least 24 characters.
 
-Deploy a new web app version and configure its `/exec` URL and the same `BROADCAST_TOKEN` in Admin → Notices → Configure sender. The copied OneSignal App ID is the source panel's existing app ID; replace it with the Sridevi Matka OneSignal App ID if a different OneSignal app is used. The OneSignal App ID alone cannot send messages; the REST API key and Apps Script deployment are required.
+Deploy a new web app version and configure its `/exec` URL and the same `BROADCAST_TOKEN` in Admin → Notices → Configure sender. The copied OneSignal App ID is the source panel's existing app ID; replace it with the A2Morning OneSignal App ID if a different OneSignal app is used. The OneSignal App ID alone cannot send messages; the REST API key and Apps Script deployment are required.
 
 ## A2Morning scheduled market maintenance
 

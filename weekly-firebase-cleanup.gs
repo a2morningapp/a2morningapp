@@ -280,7 +280,7 @@ function firebaseRequest_(method, path, payload) {
 
   const host = CLEANUP_DATABASE_URL.replace(/^https:\/\//, "").replace(/\/+$/, "");
   if (host !== CLEANUP_DATABASE_HOST) {
-    throw new Error("Cleanup is restricted to the Sridevi Matka primary Realtime Database.");
+    throw new Error("Cleanup is restricted to the A2Morning primary Realtime Database.");
   }
 
   const encodedPath = path

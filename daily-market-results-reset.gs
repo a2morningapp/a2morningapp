@@ -247,7 +247,7 @@ function dailyResultResetFirebaseRequest_(method, path, payload) {
 
   const host = DAILY_RESULT_RESET_DATABASE_URL.replace(/^https:\/\//, "").replace(/\/+$/, "");
   if (host !== DAILY_RESULT_RESET_DATABASE_HOST) {
-    throw new Error("Daily reset is restricted to the Sridevi Matka primary Realtime Database.");
+    throw new Error("Daily reset is restricted to the A2Morning primary Realtime Database.");
   }
 
   const token = dailyResultResetAccessToken_(email, privateKey);

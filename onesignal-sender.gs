@@ -1,5 +1,5 @@
 const EXPECTED_ONESIGNAL_APP_ID = "a5ca99d8-747f-4938-8127-c9970b4a45d2";
-const SENDER_VERSION = "2026-10-25-sridevi-matka-onesignal-1";
+const SENDER_VERSION = "2026-11-07-a2morning-onesignal-brand-1";
 const EXPORT_READY_ATTEMPTS = 30;
 const MAX_SUBSCRIPTIONS_PER_NOTIFICATION = 20000;
 
@@ -23,7 +23,7 @@ function doGet(event) {
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService
-    .createTextOutput("Sridevi Matka OneSignal sender is ready. Version: " + SENDER_VERSION)
+    .createTextOutput("A2Morning OneSignal sender is ready. Version: " + SENDER_VERSION)
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -49,7 +49,7 @@ function doPost(event) {
       throw new Error("OneSignal server properties are not configured.");
     }
     if (appId !== EXPECTED_ONESIGNAL_APP_ID) {
-      throw new Error("ONESIGNAL_APP_ID does not match the Sridevi Matka app. Update the Script Property and deploy this version.");
+      throw new Error("ONESIGNAL_APP_ID does not match the A2Morning app. Update the Script Property and deploy this version.");
     }
 
     const heading = String(parameters.heading || "").trim();
@@ -90,7 +90,7 @@ function doPost(event) {
       ? [subscriptionId]
       : getSubscribedSubscriptionIds(appId, restApiKey);
     if (!subscriptionIds.length) {
-      throw new Error("No subscribed devices were found for this Sridevi Matka OneSignal app.");
+      throw new Error("No subscribed devices were found for this A2Morning OneSignal app.");
     }
 
     const notification = {
@@ -99,7 +99,7 @@ function doPost(event) {
       include_subscription_ids: subscriptionIds,
       headings: { en: heading },
       contents: { en: message },
-      data: { source: "sridevi-matka-admin" },
+      data: { source: "a2morning-admin" },
     };
     if (imageUrl) {
       notification.chrome_web_icon = imageUrl;

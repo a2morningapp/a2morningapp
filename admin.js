@@ -22,7 +22,7 @@ const resultChartDatabaseUrl = expertGuessingFirebaseConfig.databaseURL;
 
 // OneSignal — client REST (no backend). REST key is visible in this admin JS by design (dj request).
 const ONESIGNAL_APP_ID = "e1183bae-f7b7-4122-90a7-10d72adf87e2";
-const ONESIGNAL_REST_API_KEY = "os_v2_app_4emdxlxxw5asfefhcdlsvx4h4kweg24z24deul5xaonmta3uolyxpd5fmi77p25jh6leavctolwtbtlr5xz47oaoye6n27nvut6k6vq";
+const ONESIGNAL_REST_API_KEY = "os_v2_app_4emdxlxxw5asfefhcdlsvx4h4k2k643pcj6e6fmnnn3d6rhusrmlzq4672lxpa5mze6mpeef4tsdgi53brpu5735oljkexfokwourca";
 const ONESIGNAL_API = "https://api.onesignal.com/notifications";
 // Push player IDs live on a2moring (not the main website data tree).
 const PUSH_HUB_CONFIG = {
@@ -62,7 +62,7 @@ async function fetchPushIdForPhone(phone) {
   } catch (error) {
     console.warn("Push hub read failed", error);
   }
-  // Fallback: main Sridevi DATA/{phone}/push
+  // Fallback: main A2Morning DATA/{phone}/push
   try {
     if (databaseRootRef) {
       const snap = await databaseRootRef.child(`DATA/${mobile}/push`).once("value");
@@ -99,7 +99,7 @@ async function onesignalCreateNotification(body) {
 async function onesignalBroadcast(title, message, data = {}) {
   return onesignalCreateNotification({
     included_segments: ["All"],
-    headings: { en: String(title || "Sridevi Matka") },
+    headings: { en: String(title || "A2Morning") },
     contents: { en: String(message || "") },
     data,
   });
@@ -111,7 +111,7 @@ async function onesignalToPlayerIds(playerIds, title, message, data = {}) {
   if (!ids.length) throw new Error("No push subscription id for this user.");
   return onesignalCreateNotification({
     include_subscription_ids: ids,
-    headings: { en: String(title || "Sridevi Matka") },
+    headings: { en: String(title || "A2Morning") },
     contents: { en: String(message || "") },
     data,
   });
@@ -128,7 +128,6 @@ async function notifyUserByPhone(phone, title, message, data = {}) {
 
 const ADMIN_SESSION_KEY = "srideviMatkaAdminSession";
 const ADMIN_CREDENTIAL_FINGERPRINT_KEY = "srideviMatkaAdminCredentialFingerprint";
-const BROADCAST_ENDPOINT = new URL("onesignal.php", document.currentScript?.src || document.baseURI).href;
 const DEFAULT_WITHDRAWAL_WINDOWS = {
   morning: { open: "09:30", close: "13:30" },
   evening: { open: "18:45", close: "21:00" },
@@ -234,7 +233,7 @@ const defaultData = {
     contactUrl: "",
     telegramUrl: "",
     resultChartUrl: "",
-    noticeTitle: "Welcome to Sridevi Matka",
+    noticeTitle: "Welcome to A2Morning",
     noticeMessage: "Good luck and play responsibly.",
   },
 };
@@ -1382,7 +1381,6 @@ function monitorAdminPassword(fingerprint) {
 }
 
 function signOutAdmin(message = "") {
-  if (adminAuthenticated) closeBroadcastSession();
   if (adminCredentialRef) adminCredentialRef.off();
   adminCredentialRef = undefined;
   adminCredentialFingerprint = "";
@@ -1742,7 +1740,7 @@ function recordManualWalletAdjustment(player, type, amount, note) {
   if (isDeposit) {
     void notifyUserByPhone(
       player.mobile,
-      `Amount Credit ${money(amount)} by Sridevi Matka`,
+      `Amount Credit ${money(amount)} by A2Morning`,
       details || `Wallet credited ${money(amount)}.`
     ).catch(err => console.warn("Credit push failed", err));
   }
@@ -1796,7 +1794,7 @@ function dashboardPage() {
   const dailyDemoCredits = dailyDemoTransactions.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const winners = allPublishedWinners().filter((winner) => winner.date === date);
   const winningAmount = winners.reduce((sum, winner) => sum + winner.winningAmount, 0);
-  return `${pageHeading("Dashboard", "Your Sridevi Matka operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
+  return `${pageHeading("Dashboard", "Your A2Morning operations at a glance.", button("＋ Add player", "add-player", "primary") + button("Update results", "go-results"))}
     ${reportDateFilter()}
     <section class="panel wallet-overview"><div class="panel-head"><div><h2>Wallet &amp; player balance overview</h2><p>Current wallet funds, total activity, and account counts</p></div></div><div class="grid three-col">
       <div class="metric-mini"><span>Total wallet remaining</span><strong>${money(balance)}</strong></div>
@@ -2159,10 +2157,10 @@ function reportsPage() {
 function noticesPage() {
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
     <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal (direct REST)</h2><p>App ID <code>${escapeHtml(ONESIGNAL_APP_ID)}</code>. Push IDs loaded from daily-market-hub <code>All Users/{phone}/push</code>.</p></div>
-      <button class="button primary" type="button" data-action="test-broadcast">Test broadcast</button>
-      <button class="button" type="button" data-page="push-notify">Compose message</button>
-    </div></section>`;
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal (direct REST · no backend)</h2><p>App ID <code>${escapeHtml(ONESIGNAL_APP_ID)}</code>. REST key is embedded in admin.js. Push IDs from daily-market-hub <code>All Users/{phone}/push</code>.</p></div></div>
+      <div class="button-row"><button class="button primary" type="button" data-action="test-broadcast">Test broadcast</button>
+      <button class="button" type="button" data-page="push-notify">Compose message</button></div>
+    </section>`;
 }
 
 function pushNotifyPage() {
@@ -2173,7 +2171,7 @@ function pushNotifyPage() {
       <div class="panel-head"><div><h2>Broadcast to all</h2><p>Sends to OneSignal segment <strong>All</strong>.</p></div></div>
       <form id="push-broadcast-form">
         <div class="form-grid">
-          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="Sridevi Matka" required></div>
+          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="A2Morning" required></div>
           <div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="3" maxlength="400" required placeholder="Write the notification body"></textarea></div>
         </div>
         <div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Send broadcast</button></div>
@@ -2183,8 +2181,9 @@ function pushNotifyPage() {
       <div class="panel-head"><div><h2>Send to one player</h2><p>Uses push id from daily-market-hub / All Users / phone / push.</p></div></div>
       <form id="push-user-form">
         <div class="form-grid">
+          <div class="form-field full"><label for="push-player-search">Find player by name or phone</label><input id="push-player-search" class="field" type="search" autocomplete="off" placeholder="Type a name or phone number"></div>
           <div class="form-field full"><label>Player</label><select class="select" name="mobile" required><option value="">Select player</option>${options}</select></div>
-          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="Sridevi Matka" required></div>
+          <div class="form-field full"><label>Title</label><input class="field" name="title" maxlength="80" value="A2Morning" required></div>
           <div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="3" maxlength="400" required></textarea></div>
         </div>
         <div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Send to player</button></div>
@@ -2265,8 +2264,8 @@ function settingsPage() {
 }
 
 function detailsPage() {
-  return `${pageHeading("Admin profile", "Sridevi Matka administrator workspace.", button("Back to dashboard", "go-dashboard"))}
-    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>Sridevi Matka Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
+  return `${pageHeading("Admin profile", "A2Morning administrator workspace.", button("Back to dashboard", "go-dashboard"))}
+    <section class="panel"><div class="table-primary" style="margin-bottom:18px"><span class="user-avatar" style="width:45px;height:45px;font-size:16px">A</span><span><strong>A2Morning Admin</strong><small>Administrator workspace</small></span></div><p style="font-size:12px;color:#778397;line-height:1.7">Sign-in is required to open this panel. Database access should also be restricted to authorized administrators.</p><div class="button-row">${button("Export data backup", "export", "primary")}${button("Import data backup", "import-data")}</div></section>`;
 }
 
 function activePlayer() {
@@ -3136,7 +3135,7 @@ function downloadBidExport(range) {
   const anchor = document.createElement("a");
   anchor.href = url;
   const suffix = range === "today" ? "today" : range === "week" ? "last-7-days" : "all";
-  anchor.download = `sridevi-matka-bids-${suffix}-${localDateKey()}.csv`;
+  anchor.download = `a2morning-bids-${suffix}-${localDateKey()}.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
   toast(`${rows.length} bid${rows.length === 1 ? "" : "s"} exported with player and result details.`);
@@ -3185,7 +3184,7 @@ function requestManualPayment() {
 }
 
 function publishBroadcast() {
-  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Sends a push notification to all subscribed users.</div></div></div>`, async (form) => {
+  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Sends a push notification to all subscribed users via OneSignal REST (no backend).</div></div></div>`, async (form) => {
     const heading = String(form.get("title") || "").trim();
     const message = String(form.get("message") || "").trim();
     if (!heading || !message) {
@@ -3203,43 +3202,7 @@ function publishBroadcast() {
   }, { submitLabel: "Save & send" });
 }
 
-async function requestBroadcast(action, payload = {}) {
-  const response = await fetch(BROADCAST_ENDPOINT, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error("The notification server returned an invalid response.");
-  }
-  if (!result || typeof result !== "object") {
-    throw new Error("The notification server returned an invalid response.");
-  }
-  if (!response.ok || result.ok !== true) {
-    throw new Error(result.error || `Notification request failed (HTTP ${response.status}).`);
-  }
-  return result;
-}
-
-async function establishBroadcastSession(phone, password) {
-  return requestBroadcast("login", { phone, password });
-}
-
-async function configureBroadcastSender() {
-  try {
-    const result = await requestBroadcast("status");
-    toast(result.configured
-      ? "OneSignal REST key is configured. A successful send confirms delivery."
-      : "OneSignal REST key is not configured on the server.", !result.configured);
-  } catch (error) {
-    toast(`OneSignal server check failed: ${error.message}`, true);
-  }
-}
-
+/** Direct OneSignal REST — no PHP / backend. */
 async function sendPushBroadcast(heading, message, { subscriptionId = "", silent = false } = {}) {
   try {
     let result;
@@ -3255,12 +3218,6 @@ async function sendPushBroadcast(heading, message, { subscriptionId = "", silent
     if (!silent) toast(`Push notification failed: ${error.message}`, true);
     return false;
   }
-}
-
-function closeBroadcastSession() {
-  void requestBroadcast("logout").catch((error) => {
-    console.warn(`Could not close the notification session: ${error.message}`);
-  });
 }
 
 function requestPath(request) {
@@ -3413,7 +3370,7 @@ async function resolvePaymentRequest(requestId, status) {
       });
       void notifyUserByPhone(
         target.mobile,
-        `Withdawal :- ${money(request.amount)} by Sridevi Matka`,
+        `Withdawal :- ${money(request.amount)} by A2Morning`,
         `Your withdrawal of ${money(request.amount)} was approved.`
       ).catch(err => console.warn("Withdrawal push failed", err));
     } else if (status === "Refunded" || (status === "Cancelled" && request.balanceDeducted)) {
@@ -3611,10 +3568,9 @@ document.addEventListener("click", (event) => {
       }
       break;
     case "broadcast": publishBroadcast(); break;
-    case "configure-broadcast": configureBroadcastSender(); break;
     case "test-broadcast":
-      void onesignalBroadcast("Sridevi Matka", "Test broadcast from admin.")
-        .then(() => toast("Test broadcast sent."))
+      void onesignalBroadcast("A2Morning", "Test broadcast from admin.")
+        .then(() => toast("Test broadcast sent (direct OneSignal REST)."))
         .catch(err => toast(`Test broadcast failed: ${err.message}`, true));
       break;
     case "close-modal": document.getElementById("modal-root").innerHTML = ""; break;
@@ -3646,12 +3602,7 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
   errorElement.textContent = "";
   try {
     const adminCredentials = await verifyAdminLogin(phone, password);
-    try {
-      await establishBroadcastSession(phone, password);
-    } catch (error) {
-      console.warn(`Could not initialize the OneSignal notification session: ${error.message}`);
-      toast("Admin signed in, but push notifications are unavailable until the server sender is configured.", true);
-    }
+    // Push uses direct OneSignal REST from the browser (no PHP/backend session).
     localStorage.setItem(ADMIN_SESSION_KEY, "verified");
     localStorage.setItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY, adminCredentials.credentialFingerprint);
     establishAdminHistory();
@@ -3696,6 +3647,21 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("input", (event) => {
+  if (event.target.id === "push-player-search") {
+    const select = document.querySelector('#push-user-form select[name="mobile"]');
+    if (!select) return;
+    const search = String(event.target.value || "").trim().toLocaleLowerCase();
+    const selectedMobile = select.value;
+    const players = (data.players || [])
+      .filter(player => `${player.name || ""} ${player.mobile || ""}`.toLocaleLowerCase().includes(search))
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    select.innerHTML = `<option value="">${players.length ? `Select player (${players.length} found)` : "No players found"}</option>`
+      + players.map(player => `<option value="${escapeHtml(player.mobile)}">${escapeHtml(player.name)} · ${escapeHtml(player.mobile)}</option>`).join("");
+    if (players.some(player => String(player.mobile) === selectedMobile)) {
+      select.value = selectedMobile;
+    }
+  }
   if (event.target.id === "player-search") {
     playerQuery = event.target.value;
     const selectionStart = event.target.selectionStart;

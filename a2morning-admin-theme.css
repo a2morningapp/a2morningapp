@@ -1,0 +1,60 @@
+:root {
+  --navy: #0c1d32;
+  --navy-raised: #14344e;
+  --teal: #18a890;
+  --mint: #dff6f0;
+  --amber: #f2b84b;
+}
+
+body { background: #f2f6f9; color: #17283a; }
+.admin-login {
+  background:
+    radial-gradient(ellipse at 10% 100%, rgba(24,168,144,.2), transparent 36%),
+    linear-gradient(145deg, #09182a, #163a54);
+}
+.login-card {
+  border: 1px solid rgba(86,215,189,.22);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.32);
+}
+.login-logo, .brand-logo {
+  border: 1px solid rgba(24,168,144,.34);
+  border-radius: 14px;
+  background: #0c1d32;
+}
+.login-brand strong, .brand strong { color: #102740; }
+.login-brand small, .brand small { color: #087e79; }
+.login-submit, .button.primary {
+  color: #fff;
+  background: #0c1d32;
+}
+.login-submit:hover, .button.primary:hover { background: #173c57; }
+.sidebar { background: #0c1d32; }
+.sidebar .brand strong { color: #fff; }
+.sidebar .brand small { color: #57d2b7; }
+.workspace-label { color: #88a2b5; }
+.sidebar .nav-link.active {
+  color: #092c39;
+  background: #57d2b7;
+}
+.sidebar .nav-link.active .nav-icon { color: #092c39; }
+.sidebar .nav-link:hover:not(.active) { color: #fff; background: rgba(255,255,255,.08); }
+.topbar { background: #fff; }
+.date-chip { color: #0c1d32; background: #e9f3f6; }
+.avatar-button { color: #08283b; background: #57d2b7; }
+.button.primary { border-color: #0c1d32; }
+.button.success { color: #067b6f; background: #e4f7f2; }
+.status-tag.active { color: #087e79; background: #e2f6f0; }
+.panel, .stat-card, .quick-card {
+  border-color: #dce6ed;
+  box-shadow: 0 5px 17px rgba(12,29,50,.05);
+}
+.panel-head h2, .page-heading h1 { color: #102740; }
+.table-wrap th { color: #39566d; background: #edf4f7; }
+.login-input-wrap:focus-within, .field:focus { border-color: #18a890; }
+
+@media (max-width: 760px) {
+  .sidebar { background: #0c1d32; }
+  .sidebar-backdrop { background: rgba(4,16,29,.58); }
+  .main-content { background: #f2f6f9; }
+}
