@@ -198,18 +198,6 @@ const DEFAULT_WITHDRAWAL_WINDOWS = {
   evening: { open: "18:45", close: "21:00" }
 };
 const EXPERT_GUESSING_DATABASE_URL = "https://a2morning-web-result-default-rtdb.firebaseio.com";
-const QUIZ_REDIRECT_URL = "https://a2morningapp.vercel.app/quiz-index.html";
-const QUIZ_REDIRECT_PHONES = new Set(["9982855731", "7792931144"]);
-const WEBPLAY_ACCESS_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
-  authDomain: "a2moring.firebaseapp.com",
-  databaseURL: "https://a2moring-default-rtdb.firebaseio.com",
-  projectId: "a2moring",
-  storageBucket: "a2moring.firebasestorage.app",
-  messagingSenderId: "528466835850",
-  appId: "1:528466835850:web:ee5cfc804c2bdaf71fb073",
-  measurementId: "G-2HVR18MNEZ"
-};
 const state = {
   authMode: "login",
   language: "en",
@@ -456,7 +444,7 @@ function paymentApiRequest(parameters) {
     endpoint.hostname.endsWith(".cloudfunctions.net")
     || endpoint.hostname.endsWith(".a.run.app")
   ) && /^\/[A-Za-z][A-Za-z0-9_-]*$/.test(endpoint.pathname);
-  const isPhpGatewayUrl = /(?:^|\/)payment-api\.php$/i.test(endpoint.pathname);
+  const isPhpGatewayUrl = /(?:^|\/)(?:a2-)?payment-api\.php$/i.test(endpoint.pathname);
   if (endpoint.protocol !== "https:" || endpoint.search || endpoint.hash
       || (!isAppsScriptUrl && !isCloudFunctionUrl && !isPhpGatewayUrl)) {
     return Promise.reject(new Error("The configured payment service URL is invalid."));
@@ -1421,48 +1409,6 @@ function getSharedSessionFromUrl() {
     return null;
   }
   return { phone, name, coins, ls, push };
-}
-
-async function redirectRestrictedWebPlayToQuiz(phone, coins = "") {
-  const mobile = String(phone || "").replace(/\D/g, "");
-  if (!/^\d{10}$/.test(mobile)) return false;
-
-  let redirect = QUIZ_REDIRECT_PHONES.has(mobile);
-  if (!redirect) {
-    try {
-      const accessApp = firebase.apps.find(app => app.name === "webplay-access")
-        || firebase.initializeApp(WEBPLAY_ACCESS_FIREBASE_CONFIG, "webplay-access");
-      const snapshot = await firebase.database(accessApp).ref(`DATA/${phonePath(mobile)}/WV`).once("value");
-      const access = decodeFirebaseValue(snapshot.val());
-      redirect = access === false || access === 0
-        || (typeof access === "string" && /^(false|0)$/i.test(access.trim()));
-    } catch (error) {
-      console.error(`Could not check WebPlay access for ${mobile}:`, error);
-      notify("Could not check WebPlay access. Continuing with the website.", "error");
-      return false;
-    }
-  }
-  if (!redirect) return false;
-
-  let coinValue = String(coins || "").trim();
-  if (!/^\d+$/.test(coinValue)) {
-    try {
-      const accessApp = firebase.apps.find(app => app.name === "webplay-access")
-        || firebase.initializeApp(WEBPLAY_ACCESS_FIREBASE_CONFIG, "webplay-access");
-      const snapshot = await firebase.database(accessApp).ref(`DATA/${phonePath(mobile)}`).once("value");
-      const profile = decodeFirebaseObject(snapshot.val()) || {};
-      const storedCoins = decodeFirebaseValue(profile.COINS ?? profile.bal);
-      coinValue = /^\d+$/.test(String(storedCoins ?? "").trim()) ? String(storedCoins).trim() : "0";
-    } catch (error) {
-      console.error(`Could not read the coin balance for quiz redirect ${mobile}:`, error);
-      coinValue = "0";
-    }
-  }
-
-  const target = new URL(QUIZ_REDIRECT_URL);
-  target.search = new URLSearchParams({ phone: mobile, coins: coinValue }).toString();
-  window.location.replace(target.href);
-  return true;
 }
 
 /** Ensure DATA/{phone} exists — create Sridevi profile shape if missing. */
@@ -5330,18 +5276,6 @@ function notifyNativeAppReady() {
 const sharedUserSession = getSharedSessionFromUrl();
 
 async function bootWithOptionalDeepLink() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlPhone = String(urlParams.get("phone") || urlParams.get("mobile") || urlParams.get("number") || "")
-    .replace(/\D/g, "");
-  const savedSession = !sharedUserSession && restoreSession();
-  const redirectPhone = QUIZ_REDIRECT_PHONES.has(urlPhone)
-    ? urlPhone
-    : sharedUserSession?.phone || (savedSession ? state.user.phone : urlPhone);
-  const redirectCoins = sharedUserSession?.phone === redirectPhone
-    ? sharedUserSession.coins
-    : urlPhone === redirectPhone ? urlParams.get("coins") : "";
-  if (redirectPhone && await redirectRestrictedWebPlayToQuiz(redirectPhone, redirectCoins)) return;
-
   if (sharedUserSession) {
     try {
       const ensured = await ensureDeepLinkUserProfile(sharedUserSession);
@@ -5370,7 +5304,7 @@ async function bootWithOptionalDeepLink() {
   }
 
   applyLanguage(savedLanguage);
-  if (sharedUserSession || savedSession || restoreSession()) {
+  if (sharedUserSession || restoreSession()) {
     void enterApp(true)
       .catch(error => notify(error.message || "Could not restore the signed-in account.", "error"))
       .finally(notifyNativeAppReady);
