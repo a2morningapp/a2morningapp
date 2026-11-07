@@ -3719,6 +3719,46 @@ td { border-color: #eee8f2; }
 }
 .aia-home-contact-row button:disabled { opacity: .55; cursor: not-allowed; }
 
+.chart-market-page > header { grid-template-columns: minmax(0, 1fr); }
+.chart-market-page > header h1 {
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: clamp(17px, 4.2vw, 21px);
+  text-align: left;
+}
+.panel-chart-page > header { grid-template-columns: minmax(0, 1fr) 44px; }
+.panel-chart-page > header h1 {
+  overflow-wrap: normal;
+  word-break: normal;
+  font-size: clamp(16px, 4vw, 20px);
+  text-align: left;
+}
+.non-home-page .time-table-scroll table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.non-home-page .time-table-scroll thead th:first-child,
+.non-home-page .time-table-scroll tbody th { width: 44%; }
+.non-home-page .time-table-scroll thead th:nth-child(2),
+.non-home-page .time-table-scroll thead th:nth-child(3),
+.non-home-page .time-table-scroll tbody td { width: 28%; }
+.non-home-page .time-table-scroll thead th {
+  padding: 10px 4px;
+  font-size: clamp(10px, 2.8vw, 13px);
+}
+.non-home-page .time-table-scroll tbody th {
+  padding: 10px 6px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: clamp(10px, 3vw, 13px);
+}
+.non-home-page .time-table-scroll tbody td {
+  padding: 10px 3px;
+  white-space: nowrap;
+  font-size: clamp(10px, 3.1vw, 14px);
+}
+
 .app-message-backdrop,
 .aia-bet-confirm-backdrop,
 .auth-policy-backdrop,
