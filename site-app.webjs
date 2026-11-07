@@ -389,7 +389,7 @@ function parseLegacyDate(tag, date) {
 }
 
 async function dbRequest(method, path, body) {
-  const options = { method, headers: {} };
+  const options = { method, headers: {}, cache: "no-store" };
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   options.signal = controller.signal;
@@ -1598,9 +1598,13 @@ async function refreshUserData() {
     query("#header-avatar").textContent = profile.name.trim().charAt(0).toUpperCase() || "K";
   }
   state.balancePath = `${profilePath}/bal`;
-  const balance = await ensureUserBalance(profilePath);
-  if (!state.user || state.user.phone !== phoneNumber) return;
-  state.balance = Number(decodeFirebaseValue(balance) ?? 0) || 0;
+  if (profile?.bal !== undefined && profile.bal !== null) {
+    state.balance = Number(decodeFirebaseValue(profile.bal) ?? 0) || 0;
+  } else {
+    const balance = await ensureUserBalance(profilePath);
+    if (!state.user || state.user.phone !== phoneNumber) return;
+    state.balance = Number(decodeFirebaseValue(balance) ?? 0) || 0;
+  }
   const demoWallet = decodeFirebaseObject(profile?.demoWallet) || {};
   state.demoBalance = Number(decodeFirebaseValue(demoWallet.balance) ?? 0) || 0;
   state.demoTransactions = normalizeDemoTransactions(demoWallet.transactions);
