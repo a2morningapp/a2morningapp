@@ -58,7 +58,7 @@ function createSubmissionContext(dbPatchAndVerify) {
     selectedGame: "Single",
     betDraft: [{ selection: "5", amount: 10, session: "Open" }],
     balance: 100,
-    balancePath: "DATA/1234567890/bal",
+    balancePath: "DATA/1234567890/COINS",
     minimumEntry: 0,
     maximumEntry: 50,
     openBets: true,

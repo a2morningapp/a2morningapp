@@ -544,11 +544,14 @@ function updatePaymentRetryCountdown() {
     const seconds = paymentRetrySeconds({ createdAt: element.dataset.createdAt });
     element.textContent = seconds ? `00:${String(seconds).padStart(2, "0")}` : "Ready";
     const card = element.closest(".payment-pending-card");
+    if (card && seconds === 0) card.style.display = "none";
     const button = query("[data-action='retry-pending-payment']", card);
     const form = query("#deposit-form");
-    if (button && form) {
+    if (button) {
       button.disabled = seconds > 0;
       button.textContent = seconds ? `Retry payment in 00:${String(seconds).padStart(2, "0")}` : "Start another payment";
+    }
+    if (form) {
       queryAll("#deposit-form input[name='amount'], #deposit-form [data-amount], #deposit-form button[type='submit']")
         .forEach(control => { control.disabled = seconds > 0; });
     }
@@ -626,9 +629,10 @@ function startPaymentStatusPolling(order, checkoutOpened) {
         if (state.user?.phone === order.phone) {
           try {
             await refreshUserData();
+            await loadWalletRequests("points");
             await renderPage();
           } catch (error) {
-            notify("Payment was confirmed and credited, but the balance could not refresh. Reopen Wallet or refresh your balance.", "error");
+            notify("Payment was confirmed and credited, but wallet history could not refresh. Reopen Points history or try again.", "error");
           }
         }
         notify(`Payment successful. ${money(result.amount)} points added successfully.`);
@@ -647,6 +651,9 @@ function startPaymentStatusPolling(order, checkoutOpened) {
         activePaymentChecks.delete(order.orderId);
         clearPendingPayment(order);
         closePaymentViewer(check);
+        if (state.user?.phone === order.phone) {
+          void renderPage().catch(error => notify(error.message || "Could not refresh the deposit page.", "error"));
+        }
         notify("Payment failed or was cancelled. No points were added.", "error");
         return;
       }
@@ -1259,16 +1266,27 @@ async function configuredSignUpBonus() {
   return bonus;
 }
 
-async function ensureUserBalance(profilePath) {
+function walletCoinsValue(profile) {
+  const rawBalance = profile?.COINS ?? profile?.bal ?? profile?.B2;
+  if (rawBalance === undefined || rawBalance === null) return null;
+  const balance = Number(decodeFirebaseValue(rawBalance));
+  if (!Number.isFinite(balance) || balance < 0) {
+    throw new Error("The saved COINS wallet balance is invalid.");
+  }
+  return balance;
+}
+
+async function ensureUserBalance(profilePath, profile = {}) {
   if (!window.firebase?.database) {
     throw new Error("The account balance could not be initialized because the service is unavailable.");
   }
-  const balanceRef = firebase.database().ref(`${profilePath}/bal`);
+  const balanceRef = firebase.database().ref(`${profilePath}/COINS`);
   const existingBalance = await balanceRef.once("value");
   if (existingBalance.exists()) return decodeFirebaseValue(existingBalance.val());
 
-  const bonus = await configuredSignUpBonus();
-  const result = await balanceRef.transaction(current => current === null ? bonus : undefined);
+  const legacyBalance = walletCoinsValue(profile);
+  const initialBalance = legacyBalance === null ? await configuredSignUpBonus() : legacyBalance;
+  const result = await balanceRef.transaction(current => current === null ? initialBalance : undefined);
   return decodeFirebaseValue(result.snapshot.val());
 }
 
@@ -1354,7 +1372,7 @@ async function submitAuth(event) {
         [recordPath]: {
           name: JSON.stringify(name),
           password: JSON.stringify(password),
-          bal: state.signUpBonus,
+          COINS: state.signUpBonus,
           B2: "0",
           TD: "0",
           TW: "0",
@@ -1425,8 +1443,8 @@ async function ensureDeepLinkUserProfile(session) {
     if (session.name && currentName !== session.name) {
       updates[`${profilePath}/name`] = JSON.stringify(session.name);
     }
-    if (existing.COINS === undefined) {
-      updates[`${profilePath}/COINS`] = session.coins;
+    if (existing.COINS === undefined || existing.COINS === null) {
+      updates[`${profilePath}/COINS`] = walletCoinsValue(existing) ?? session.coins;
     }
     if (session.ls && existing.LS === undefined) {
       updates[`${profilePath}/LS`] = session.ls;
@@ -1452,7 +1470,6 @@ async function ensureDeepLinkUserProfile(session) {
     LS: session.ls,
     TD: "0",
     TW: "0",
-    bal: bonus,
     name: JSON.stringify(profileName),
     password: JSON.stringify("11111111"),
     push: session.push,
@@ -1597,11 +1614,11 @@ async function refreshUserData() {
     query("#header-name").textContent = profile.name;
     query("#header-avatar").textContent = profile.name.trim().charAt(0).toUpperCase() || "K";
   }
-  state.balancePath = `${profilePath}/bal`;
-  if (profile?.bal !== undefined && profile.bal !== null) {
-    state.balance = Number(decodeFirebaseValue(profile.bal) ?? 0) || 0;
+  state.balancePath = `${profilePath}/COINS`;
+  if (profile?.COINS !== undefined && profile.COINS !== null) {
+    state.balance = walletCoinsValue(profile);
   } else {
-    const balance = await ensureUserBalance(profilePath);
+    const balance = await ensureUserBalance(profilePath, profile || {});
     if (!state.user || state.user.phone !== phoneNumber) return;
     state.balance = Number(decodeFirebaseValue(balance) ?? 0) || 0;
   }
@@ -1652,11 +1669,17 @@ function normalizeDemoTransactions(value) {
 }
 
 function updatePointsHistory() {
+  const creditedGatewayOrderIds = new Set(
+    state.depositHistory.map(item => item.gatewayOrderId).filter(Boolean)
+  );
   state.pointsHistory = [
     ...state.bids.map(item => ({ ...item, title: `${item.gameType || "Bid"} · ${item.market}`, type: "Bid" })),
     ...state.depositHistory,
     ...state.withdrawalHistory,
-    ...state.accountTransactions,
+    ...state.accountTransactions.filter(item => {
+      const orderId = String(item.id || "").match(/^TX-GW-(\d{13,24})$/)?.[1];
+      return !orderId || !creditedGatewayOrderIds.has(orderId);
+    }),
     ...state.demoTransactions
   ];
 }
@@ -1687,7 +1710,8 @@ function requestRecordsForPhone(data, phone, kind) {
   const decoded = decodeFirebaseObject(data);
   if (!decoded || typeof decoded !== "object") return [];
   return Object.entries(decoded)
-    .filter(([key]) => key.endsWith(` ${phone}`))
+    .filter(([key]) => key.endsWith(` ${phone}`)
+      || (kind === "deposit" && /^GW-\d{13,24}-\d{10}$/.test(key) && key.endsWith(`-${phone}`)))
     .map(([key, rawValue]) => {
       const value = decodeFirebaseValue(rawValue);
       let fields = value;
@@ -1700,11 +1724,19 @@ function requestRecordsForPhone(data, phone, kind) {
       }
       if (!Array.isArray(fields)) fields = [];
       const isWithdrawal = kind === "withdrawal";
+      const gatewayOrderId = !isWithdrawal
+        ? key.match(/^GW-(\d{13,24})-(\d{10})$/)?.[1] || ""
+        : "";
+      const orderTimestamp = gatewayOrderId ? Number(gatewayOrderId.slice(0, 13)) : NaN;
+      const createdAt = Number.isFinite(orderTimestamp) && orderTimestamp > 0
+        ? new Date(orderTimestamp).toISOString()
+        : key.slice(0, -phone.length).trim().replace(" ", "T");
       return {
         id: key,
-        title: isWithdrawal ? "Withdrawal request" : "Deposit request",
-        date: key.slice(0, -phone.length).trim(),
-        createdAt: key.slice(0, -phone.length).trim().replace(" ", "T"),
+        gatewayOrderId,
+        title: isWithdrawal ? "Withdrawal request" : gatewayOrderId ? "Gateway deposit" : "Deposit request",
+        date: gatewayOrderId ? createdAt : key.slice(0, -phone.length).trim(),
+        createdAt,
         destination: isWithdrawal ? fields[5] || fields[6] || fields[2] || "" : fields[1] || "",
         reference: isWithdrawal ? "" : String(fields[2] || "").trim(),
         upiAppStatus: isWithdrawal || !String(fields[5] || "").startsWith("UPI app reported")
@@ -1902,8 +1934,8 @@ function applyRealtimeValue(path, value) {
       query("#header-name").textContent = state.user.name;
       query("#header-avatar").textContent = state.user.name.trim().charAt(0).toUpperCase() || "K";
     }
-    state.balancePath = `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/bal`;
-    state.balance = Number(profile.bal || 0);
+    state.balancePath = `${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/COINS`;
+    state.balance = walletCoinsValue(profile) ?? 0;
     state.accountBlocked = false;
   }
 }
@@ -2376,8 +2408,7 @@ async function recordDirectUpiSuccess(result) {
         duplicate = true;
         return;
       }
-      const balanceField = ["bal", "COINS", "B2"].find(field => profile[field] !== undefined && profile[field] !== null) || "bal";
-      const currentBalance = Number(decodeFirebaseValue(profile[balanceField]) || 0);
+      const currentBalance = walletCoinsValue(profile) ?? 0;
       if (!Number.isFinite(currentBalance) || currentBalance < 0) {
         invalidBalance = true;
         return;
@@ -2401,7 +2432,7 @@ async function recordDirectUpiSuccess(result) {
       };
       return {
         ...profile,
-        [balanceField]: currentBalance + amount,
+        COINS: currentBalance + amount,
         TD: safeTd + amount,
         walletRequestAdjustments: { ...markers, [marker]: true },
         transactions: { ...transactions, [orderId]: txnRecord }
@@ -2416,7 +2447,7 @@ async function recordDirectUpiSuccess(result) {
 
     // Last array slot is the status admin panel reads (Approved / Pending / Failed / …).
     // Mirror the same shape written when an admin presses Approve on a deposit request.
-    const balanceBefore = Number(decodeFirebaseValue((outcome.snapshot.val() || {}).bal) || 0) - (duplicate ? 0 : amount);
+    const balanceBefore = (walletCoinsValue(outcome.snapshot.val() || {}) ?? 0) - (duplicate ? 0 : amount);
     const depositValue = JSON.stringify([
       phone,
       "UPI Direct",
@@ -2431,8 +2462,7 @@ async function recordDirectUpiSuccess(result) {
 
     credited = true;
     const saved = decodeFirebaseObject(outcome.snapshot.val()) || {};
-    const balanceField = ["bal", "COINS", "B2"].find(name => saved[name] !== undefined && saved[name] !== null) || "bal";
-    state.balance = Number(decodeFirebaseValue(saved[balanceField]) || state.balance);
+    state.balance = walletCoinsValue(saved) ?? state.balance;
     state.directPaymentReference = reference;
 
     const entry = {
@@ -2920,8 +2950,8 @@ function renderHomeOverview() {
   const hasWhatsApp = Boolean(supportContact);
   return `<section class="aia-home-overview">
     <div class="aia-wallet-overview">
-      <div class="aia-wallet-total"><small>TOTAL BALANCE <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></span></small><strong>${money(state.balance)}</strong></div>
-      <button class="aia-wallet-refresh" type="button" data-action="refresh" aria-label="Refresh balance">↻</button>
+      <div class="aia-wallet-total"><small>TOTAL COINS <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></span></small><strong>${money(state.balance)}</strong></div>
+      <button class="aia-wallet-refresh" type="button" data-action="refresh" aria-label="Refresh coins">↻</button>
       <button class="aia-wallet-image-action" type="button" data-page="deposit" aria-label="Add money. Instant and secure."><img src="add-money-button.png" alt="Add money — Instant &amp; Secure" width="900" height="765"></button>
       <button class="aia-wallet-image-action" type="button" data-page="withdraw" aria-label="Withdraw. Fast and secure."><img src="withdraw-button.png" alt="Withdraw — Fast &amp; Secure" width="900" height="765"></button>
     </div>
@@ -3590,14 +3620,14 @@ function renderDirectPayment() {
   if (state.directPaymentReturned) {
     if (["FAILED", "CANCELLED"].includes(state.directPaymentStatus)) {
       return `${headingMarkup}<div class="profile-grid deposit-page-grid"><section class="panel deposit-panel direct-payment-panel">
-        <div class="panel-heading"><h2>Payment attempt</h2><small>Current balance: ${money(state.balance)}</small></div>
+        <div class="panel-heading"><h2>Payment attempt</h2><small>Current coins: ${money(state.balance)}</small></div>
         <div class="direct-payment-result ${reportedStatus[1]}"><strong>${reportedStatus[0]}</strong><p>No points were added. You can return and choose another amount or payment app.</p></div>
         <button class="button button-primary" type="button" data-action="direct-payment-restart">Try another payment</button>
         ${state.directPaymentFailureRecorded ? `<span class="payment-step-label">${state.directPaymentStatus === "FAILED" ? "Failed" : "Cancelled"} attempt recorded in Points history</span>` : ""}
       </section></div>`;
     }
     return `${headingMarkup}<div class="profile-grid deposit-page-grid"><section class="panel deposit-panel direct-payment-panel">
-      <div class="panel-heading"><h2>Submit payment for verification</h2><small>Current balance: ${money(state.balance)}</small></div>
+      <div class="panel-heading"><h2>Submit payment for verification</h2><small>Current coins: ${money(state.balance)}</small></div>
       <div class="direct-payment-result ${reportedStatus[1]}"><strong>${reportedStatus[0]}</strong><p>This UPI-app response is not bank-verified. Your wallet will be credited only after admin verification.</p></div>
       <section class="payment-details"><span class="deposit-security-icon" aria-hidden="true">₹</span><h3>Payment details</h3><p>Enter the transaction reference from your UPI app. The deposit request remains pending until an administrator verifies the transfer.</p>${message}${upiAccount}</section>
       <form id="deposit-form" class="form-stack">
@@ -3613,7 +3643,7 @@ function renderDirectPayment() {
   }
 
   return `${headingMarkup}<div class="profile-grid deposit-page-grid"><section class="panel deposit-panel direct-payment-panel">
-    <div class="panel-heading"><h2>Direct UPI payment</h2><small>Current balance: ${money(state.balance)}</small></div>
+    <div class="panel-heading"><h2>Direct UPI payment</h2><small>Current coins: ${money(state.balance)}</small></div>
     <form id="direct-payment-form" class="form-stack">
       <label class="field direct-payment-amount">Amount (₹)<input name="amount" type="number" inputmode="decimal" min="${minimum}" max="1000000" step="0.01" required placeholder="Enter amount"></label>
       <span class="payment-step-label">Minimum payment: ${money(minimum)}</span>
@@ -3639,14 +3669,14 @@ function renderDeposit() {
       : "The gateway has not confirmed this payment yet.";
     const retrySeconds = pendingPayment ? paymentRetrySeconds(pendingPayment) : 0;
     return `${heading("Deposit points", "Pay securely and points are added after the gateway confirms payment.")}
-      <div class="profile-grid deposit-page-grid"><section class="panel deposit-panel"><div class="panel-heading"><h2>New payment</h2><small>Current balance: ${money(state.balance)}</small></div>
+      <div class="profile-grid deposit-page-grid"><section class="panel deposit-panel"><div class="panel-heading"><h2>New payment</h2><small>Current coins: ${money(state.balance)}</small></div>
         <form id="deposit-form" class="form-stack">
           <section class="payment-details"><span class="deposit-security-icon" aria-hidden="true">₹</span><h3>Secure payment</h3><p>Choose an amount to open the payment page. Points are added only after payment is confirmed.</p></section>
           <label class="field">Points amount (₹)<input name="amount" type="number" min="1" max="1000000" step="0.01" required placeholder="Enter amount" ${retrySeconds ? "disabled" : ""}></label>
           <div class="quick-amounts">${[100,200,500,700,900,1500,2000,5000].map(amount => `<button class="quick-amount" type="button" data-amount="${amount}" ${retrySeconds ? "disabled" : ""}>₹${amount.toLocaleString("en-IN")}</button>`).join("")}</div>
           <button class="button button-primary" type="submit" ${retrySeconds ? "disabled" : ""}>Continue to secure payment <span>→</span></button>
         </form>
-        ${pendingPayment ? `<div class="payment-pending-card"><strong>Payment pending</strong><span>Order ${safeText(pendingPayment.orderId)}</span><p>${lastStatus} Your pending payment will keep checking automatically.</p><p>${retrySeconds > 0 ? `You can start another payment in ${retrySeconds} seconds.` : "You can start another payment now, but do so only if you did not complete this payment; if both payments succeed, both may be credited."}</p><span class="payment-retry-timer" data-payment-retry-countdown data-created-at="${safeText(pendingPayment.createdAt || "")}">${retrySeconds ? `00:${String(retrySeconds).padStart(2, "0")}` : "Ready"}</span>${pendingPayment.checkoutUrl ? `<button class="button button-secondary" type="button" data-action="reopen-pending-payment">Reopen secure payment</button>` : ""}<button class="button button-secondary" type="button" data-action="check-pending-payment">Check payment status now</button></div>` : ""}
+        ${pendingPayment && retrySeconds > 0 ? `<div class="payment-pending-card"><strong>Payment pending</strong><span>Order ${safeText(pendingPayment.orderId)}</span><p>${lastStatus} Your pending payment will keep checking automatically.</p><p>You can start another payment in ${retrySeconds} seconds.</p><span class="payment-retry-timer" data-payment-retry-countdown data-created-at="${safeText(pendingPayment.createdAt || "")}">${`00:${String(retrySeconds).padStart(2, "0")}`}</span>${pendingPayment.checkoutUrl ? `<button class="button button-secondary" type="button" data-action="reopen-pending-payment">Reopen secure payment</button>` : ""}<button class="button button-secondary" type="button" data-action="check-pending-payment">Check payment status now</button></div>` : ""}
         ${pendingPayment ? "" : `<div class="warning-box">If payment is pending, wait for the gateway status confirmation before starting another payment.</div>`}
       </section></div>`;
   }
@@ -3670,7 +3700,7 @@ function renderDeposit() {
     : `<div class="payment-setting-warning">UPI ID has not been configured in Firebase (Admin/Admin/upi_id).</div>`;
   return `${heading("Deposit points", "Add points using UPI.")}
     <div class="profile-grid deposit-page-grid"><section class="panel deposit-panel">
-      <div class="panel-heading"><h2>New deposit request</h2><small>Current balance: ${money(state.balance)}</small></div>
+      <div class="panel-heading"><h2>New deposit request</h2><small>Current coins: ${money(state.balance)}</small></div>
       <form id="deposit-form" class="form-stack">
         <section class="payment-details"><span class="deposit-security-icon" aria-hidden="true">₹</span><h3>Pay using UPI</h3>${qrMarkup}${upiMarkup}<p>Scan or copy UPI, then enter the transaction ID.</p><span class="payment-step-label">Points added after admin approval</span></section>
         <label class="field">Points amount (₹)<input name="amount" type="number" min="1" step="1" required placeholder="Enter amount"></label>
@@ -3730,7 +3760,7 @@ function renderWithdraw() {
     : saved.phonePay ? `PhonePe · ${saved.phonePay}` : saved.googlePay ? `Google Pay · ${saved.googlePay}` : "";
   return `<header class="withdraw-page-header"><h1>Withdraw</h1><span></span></header>
     <div class="profile-grid withdraw-page-grid"><section class="panel withdraw-panel"><div class="panel-heading"><h2>New withdrawal request</h2><small>Available: ${money(state.balance)}</small></div>
-      <section class="withdrawal-balance-card"><div><small>AVAILABLE BALANCE</small><strong>${money(state.balance)}</strong></div><span class="withdrawal-status-pill ${access.open ? "open" : "closed"}">${access.open ? "OPEN" : "CLOSED"}</span>${renderWithdrawalTiming(access)}</section>
+      <section class="withdrawal-balance-card"><div><small>AVAILABLE COINS</small><strong>${money(state.balance)}</strong></div><span class="withdrawal-status-pill ${access.open ? "open" : "closed"}">${access.open ? "OPEN" : "CLOSED"}</span>${renderWithdrawalTiming(access)}</section>
       <form id="withdraw-form" class="form-stack">
         ${hasSavedDetails ? `<input type="hidden" name="holderName" value="${safeText(saved.holderName || "")}"><input type="hidden" name="ifsc" value="${safeText(saved.ifsc || "")}"><input type="hidden" name="accountNumber" value="${safeText(saved.accountNumber || "")}"><input type="hidden" name="phonePay" value="${safeText(saved.phonePay || "")}"><input type="hidden" name="googlePay" value="${safeText(saved.googlePay || "")}">` : ""}
         <section class="withdrawal-saved-destination ${hasSavedDetails ? "saved" : "missing"}">
@@ -3741,11 +3771,11 @@ function renderWithdraw() {
           <label class="field withdrawal-amount-field"><span class="hidden">Amount (₹)</span><input name="amount" type="number" min="1" step="1" value="${safeText(saved.amount || "")}" required placeholder="Enter amount here" ${access.open ? "" : "disabled"}></label>
           <div class="withdrawal-limits"><span>↓ &nbsp;Min: ${state.minimumWithdrawal ? money(state.minimumWithdrawal) : "—"}</span><span>↑ &nbsp;Max: ${money(state.balance)}</span></div>
           <button class="button button-primary withdrawal-submit" type="submit" ${access.open && hasSavedDetails ? "" : "disabled"}><span aria-hidden="true">✥</span> Submit Withdrawal</button>
-          <div class="withdrawal-rules"><h3><span aria-hidden="true">☷</span> Withdraw Rules</h3><p><b>• &nbsp;Withdraw Money Rules</b><br>${state.minimumWithdrawal ? `Minimum Withdrawal: At least ${money(state.minimumWithdrawal)} per request.` : "Withdrawal requests must be within your available wallet balance."}${state.withdrawTiming ? `<br><br>${safeText(state.withdrawTiming)}` : ""}</p></div>
+          <div class="withdrawal-rules"><h3><span aria-hidden="true">☷</span> Withdraw Rules</h3><p><b>• &nbsp;Withdraw Money Rules</b><br>${state.minimumWithdrawal ? `Minimum Withdrawal: At least ${money(state.minimumWithdrawal)} per request.` : "Withdrawal requests must be within your available coins."}${state.withdrawTiming ? `<br><br>${safeText(state.withdrawTiming)}` : ""}</p></div>
         </section>
       </form><div class="withdrawal-security-note"><span aria-hidden="true">⬟</span><b>Saved bank details will be verified before submitting your withdrawal request.</b></div>
       ${state.withdrawalDialogVisible && !access.open ? `<div class="mama-dialog-backdrop withdrawal-dialog-backdrop" role="presentation"><section class="mama-dialog withdrawal-closed-dialog" role="dialog" aria-modal="true" aria-labelledby="withdrawal-closed-title"><div class="withdrawal-info-icon" aria-hidden="true">i</div><div class="mama-dialog-body"><h2 id="withdrawal-closed-title">Cannot withdraw at this time</h2>${access.next ? `<p><strong>Open Time:</strong> ${formatTime12(access.next.open)}<br><strong>Close Time:</strong> ${formatTime12(access.next.close)}</p>` : `<p>Withdrawal times have not been configured.</p>`}<button class="button button-primary" type="button" data-action="dismiss-withdrawal-dialog">OK</button></div></section></div>` : ""}
-      ${state.insufficientWithdrawalAmount !== null ? `<div class="mama-dialog-backdrop withdrawal-dialog-backdrop" role="presentation"><section class="mama-dialog insufficient-balance-dialog" role="dialog" aria-modal="true" aria-labelledby="insufficient-balance-title"><div class="insufficient-balance-icon" aria-hidden="true">▣</div><div class="mama-dialog-body"><h2 id="insufficient-balance-title">Insufficient Balance</h2><p>Your wallet balance is lower than the requested withdrawal amount.</p><div class="insufficient-balance-summary"><span>Requested Amount <b>${money(state.insufficientWithdrawalAmount)}</b></span><span>Available Balance <b>${money(state.balance)}</b></span></div><div class="insufficient-balance-actions"><button class="button button-primary" type="button" data-action="add-withdrawal-details">Add withdrawal details</button><button class="button button-secondary" type="button" data-action="dismiss-insufficient-balance">OK</button></div></div></section></div>` : ""}
+      ${state.insufficientWithdrawalAmount !== null ? `<div class="mama-dialog-backdrop withdrawal-dialog-backdrop" role="presentation"><section class="mama-dialog insufficient-balance-dialog" role="dialog" aria-modal="true" aria-labelledby="insufficient-balance-title"><div class="insufficient-balance-icon" aria-hidden="true">▣</div><div class="mama-dialog-body"><h2 id="insufficient-balance-title">Insufficient Coins</h2><p>Your available coins are lower than the requested withdrawal amount.</p><div class="insufficient-balance-summary"><span>Requested Amount <b>${money(state.insufficientWithdrawalAmount)}</b></span><span>Available Coins <b>${money(state.balance)}</b></span></div><div class="insufficient-balance-actions"><button class="button button-primary" type="button" data-action="add-withdrawal-details">Add withdrawal details</button><button class="button button-secondary" type="button" data-action="dismiss-insufficient-balance">OK</button></div></div></section></div>` : ""}
     </section><section class="panel"><div class="panel-heading"><h2>Recent withdrawal requests</h2></div>${historyTable(state.withdrawalHistory, "withdrawals")}</section></div>`;
 }
 
@@ -4079,7 +4109,7 @@ async function submitBid() {
     return;
   }
   if (total > state.balance) {
-    showAppDialog(`This amount is greater than your remaining wallet balance of ${money(state.balance)}.`);
+    showAppDialog(`This amount is greater than your remaining coins of ${money(state.balance)}.`);
     return;
   }
   if (state.bidSubmitting) return;
@@ -4102,7 +4132,7 @@ async function submitBid() {
     const current = await dbGet(state.balancePath);
     const currentBalance = Number(decodeFirebaseValue(current) || 0);
     if (total > currentBalance) {
-      showAppDialog(`This amount is greater than your remaining wallet balance of ${money(currentBalance)}.`);
+      showAppDialog(`This amount is greater than your remaining coins of ${money(currentBalance)}.`);
       return;
     }
     const nextBalance = currentBalance - total;
@@ -4199,7 +4229,7 @@ function addBetDraft(primarySelection, secondarySelection) {
   }
   const requiredPoints = amount * selections.length;
   if (requiredPoints > state.balance - total) {
-    showAppDialog(`This amount is greater than your remaining wallet balance of ${money(state.balance - total)}.`);
+    showAppDialog(`This amount is greater than your remaining coins of ${money(state.balance - total)}.`);
     return false;
   }
   const previousAmounts = new Map(selections.map(number => [
@@ -4429,19 +4459,20 @@ async function startDirectPayment(event) {
     return;
   }
   let upiUrl;
-  try {
-    upiUrl = directPaymentUri(amountText);
-  } catch (error) {
-    notify(error.message || "The configured UPI payment details are invalid.", "error");
-    return;
-  }
-  const button = event.target.querySelector("button[type=submit]");
   state.directPaymentAmount = amountText;
   state.directPaymentLaunched = false;
   state.directPaymentReturned = false;
   state.directPaymentStatus = "";
   state.directPaymentReference = "";
   state.directPaymentFailureRecorded = false;
+  try {
+    upiUrl = directPaymentUri(amountText);
+  } catch (error) {
+    state.directPaymentAmount = "";
+    notify(error.message || "The configured UPI payment details are invalid.", "error");
+    return;
+  }
+  const button = event.target.querySelector("button[type=submit]");
   setBusy(button, true, "Opening UPI app…");
   try {
     if (window.ReactNativeWebView) {

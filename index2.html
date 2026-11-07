@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="sridevi-matka-theme.css?v=market-chart-time-table-1">
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
-  <script src="site-app.webjs?v=payment-wallet-refresh-1" defer></script>
+  <script src="site-app.webjs?v=payment-retry-upi-ref-v1" defer></script>
 </head>
 <body>
   <main id="auth-view" class="auth-shell">
@@ -79,7 +79,7 @@
     <aside class="sidebar" id="sidebar">
       <button class="sidebar-profile" type="button" data-page="profile">
         <span class="sidebar-profile-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 12a4.3 4.3 0 1 0 0-8.6 4.3 4.3 0 0 0 0 8.6Zm-8 9a8 8 0 0 1 16 0"/></svg></span>
-        <span class="sidebar-profile-copy"><strong id="drawer-user-name">Player</strong><small>Balance: <b id="drawer-user-balance">₹ 0</b></small></span>
+        <span class="sidebar-profile-copy"><strong id="drawer-user-name">Player</strong><small>Coins: <b id="drawer-user-balance">₹ 0</b></small></span>
         <span class="sidebar-profile-chevron" aria-hidden="true">›</span>
       </button>
       <nav class="side-nav" aria-label="Main navigation">
@@ -109,7 +109,7 @@
         <div class="aia-mobile-brand" aria-label="A2 Morning">
           <img src="a2morning-logo.png" alt="A2 Morning">
         </div>
-        <button class="aia-mobile-balance" type="button" data-page="points" aria-label="Wallet balance. Open points history."><img src="icon-coin.png" alt=""><span>Balance</span><strong id="aia-header-balance">₹ 0</strong></button>
+        <button class="aia-mobile-balance" type="button" data-page="points" aria-label="Coins wallet. Open points history."><img src="icon-coin.png" alt=""><span>Coins</span><strong id="aia-header-balance">₹ 0</strong></button>
         <button class="aia-mobile-notices" type="button" data-page="notices" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
         <button class="aia-mobile-support" type="button" data-action="open-contact" aria-label="Contact support"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></button>
         <div class="breadcrumb"><span>Sridevi Matka</span><span class="breadcrumb-sep">/</span><strong id="page-breadcrumb">Home</strong></div>
