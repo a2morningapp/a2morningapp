@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const ONESIGNAL_APP_ID = 'a5ca99d8-747f-4938-8127-c9970b4a45d2';
+const ONESIGNAL_APP_ID = 'e1183bae-f7b7-4122-90a7-10d72adf87e2';
 const ADMIN_DATABASE_URL = 'https://a2morning-in-website-new-db-default-rtdb.firebaseio.com/Admin/Admin.json';
 const ONESIGNAL_API_URL = 'https://api.onesignal.com/notifications';
 
@@ -27,10 +27,15 @@ function requireSameOrigin(): void
     $originPort = parse_url($origin ?: '', PHP_URL_PORT);
     $originScheme = strtolower(parse_url($origin ?: '', PHP_URL_SCHEME) ?: '');
     $requestPort = parse_url('https://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_PORT);
-    $allowedHosts = ['localhost', '127.0.0.1'];
+    $configuredHosts = getenv('ADMIN_ALLOWED_HOSTS') ?: '';
+    $allowedHosts = array_values(array_filter(array_map(
+        static fn($allowedHost) => strtolower(trim($allowedHost)),
+        explode(',', $configuredHosts)
+    )));
     $isLocal = in_array($host, ['localhost', '127.0.0.1'], true);
 
-    if (!in_array($host, $allowedHosts, true) || $originHost !== $host || $originPort !== $requestPort
+    if (($allowedHosts && !in_array($host, $allowedHosts, true))
+        || $originHost !== $host || $originPort !== $requestPort
         || ($originScheme !== 'https' && !$isLocal)) {
         respond(403, ['ok' => false, 'error' => 'Requests must come from the admin website over HTTPS.']);
     }
@@ -210,11 +215,16 @@ if ($action !== 'send') {
 $heading = trim((string) ($request['heading'] ?? ''));
 $message = trim((string) ($request['message'] ?? ''));
 $subscriptionId = trim((string) ($request['subscriptionId'] ?? ''));
+$data = $request['data'] ?? null;
 if ($heading === '' || strlen($heading) > 240 || $message === '' || strlen($message) > 1000) {
     respond(400, ['ok' => false, 'error' => 'Enter a title and message within the allowed length.']);
 }
 if ($subscriptionId !== '' && !preg_match('/^[a-f0-9-]{36}$/i', $subscriptionId)) {
     respond(400, ['ok' => false, 'error' => 'The targeted subscription ID is invalid.']);
+}
+$dataIsList = is_array($data) && $data !== [] && array_keys($data) === range(0, count($data) - 1);
+if ($data !== null && (!is_array($data) || $dataIsList)) {
+    respond(400, ['ok' => false, 'error' => 'Notification data must be a JSON object.']);
 }
 
 $apiKey = oneSignalRestApiKey();
@@ -235,6 +245,9 @@ if ($subscriptionId !== '') {
     $payload['include_subscription_ids'] = [$subscriptionId];
 } else {
     $payload['included_segments'] = ['All'];
+}
+if (is_array($data) && $data !== []) {
+    $payload['data'] = $data;
 }
 
 $curl = curl_init(ONESIGNAL_API_URL);
@@ -262,4 +275,8 @@ if ($responseBody === false || $status < 200 || $status >= 300) {
 
 $result = json_decode($responseBody, true);
 $recipients = is_array($result) ? (int) ($result['recipients'] ?? 0) : 0;
-respond(200, ['ok' => true, 'recipients' => $recipients]);
+respond(200, [
+    'ok' => true,
+    'recipients' => $recipients,
+    'notificationId' => is_array($result) ? (string) ($result['id'] ?? '') : '',
+]);

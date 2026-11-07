@@ -20,10 +20,9 @@ const expertGuessingFirebaseConfig = {
 };
 const resultChartDatabaseUrl = expertGuessingFirebaseConfig.databaseURL;
 
-// OneSignal — client REST (no backend). REST key is visible in this admin JS by design (dj request).
-const ONESIGNAL_APP_ID = "e1183bae-f7b7-4122-90a7-10d72adf87e2";
-const ONESIGNAL_REST_API_KEY = "os_v2_app_4emdxlxxw5asfefhcdlsvx4h4k2k643pcj6e6fmnnn3d6rhusrmlzq4672lxpa5mze6mpeef4tsdgi53brpu5735oljkexfokwourca";
-const ONESIGNAL_API = "https://api.onesignal.com/notifications";
+// The REST API key stays on the PHP server; browser sends use its authenticated endpoint.
+const BROADCAST_ENDPOINT = new URL("onesignal.php", document.currentScript?.src || document.baseURI).href;
+let broadcastSessionEstablished = false;
 // Push player IDs live on a2moring (not the main website data tree).
 const PUSH_HUB_CONFIG = {
   apiKey: "AIzaSyB8nW1wxOLhTYBj1-6k-q-jmms50GUUxGg",
@@ -76,45 +75,32 @@ async function fetchPushIdForPhone(phone) {
   return "";
 }
 
-async function onesignalCreateNotification(body) {
-  const response = await fetch(ONESIGNAL_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      Authorization: `Key ${ONESIGNAL_REST_API_KEY}`,
-    },
-    body: JSON.stringify({
-      app_id: ONESIGNAL_APP_ID,
-      ...body,
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.errors ? JSON.stringify(payload.errors) : (payload?.error || `OneSignal HTTP ${response.status}`));
-  }
-  return payload;
-}
-
-/** Broadcast to entire subscribed app audience. */
 async function onesignalBroadcast(title, message, data = {}) {
-  return onesignalCreateNotification({
-    included_segments: ["All"],
-    headings: { en: String(title || "A2Morning") },
-    contents: { en: String(message || "") },
+  return requestBroadcast("send", {
+    heading: String(title || "A2Morning"),
+    message: String(message || ""),
     data,
   });
 }
 
-/** Send to one or more OneSignal player / subscription ids. */
 async function onesignalToPlayerIds(playerIds, title, message, data = {}) {
   const ids = [...new Set((playerIds || []).map(id => String(id || "").trim()).filter(Boolean))];
   if (!ids.length) throw new Error("No push subscription id for this user.");
-  return onesignalCreateNotification({
-    include_subscription_ids: ids,
-    headings: { en: String(title || "A2Morning") },
-    contents: { en: String(message || "") },
-    data,
-  });
+  const results = [];
+  for (const subscriptionId of ids) {
+    results.push(await requestBroadcast("send", {
+      heading: String(title || "A2Morning"),
+      message: String(message || ""),
+      subscriptionId,
+      data,
+    }));
+  }
+  const result = {
+    recipients: results.reduce((sum, result) => sum + (Number(result.recipients) || 0), 0),
+    notificationIds: results.map(result => result.notificationId).filter(Boolean),
+  };
+  if (!result.recipients) throw new Error("OneSignal accepted no subscribed recipients. Check the app ID and player subscription.");
+  return result;
 }
 
 async function notifyUserByPhone(phone, title, message, data = {}) {
@@ -1381,6 +1367,7 @@ function monitorAdminPassword(fingerprint) {
 }
 
 function signOutAdmin(message = "") {
+  closeBroadcastSession();
   if (adminCredentialRef) adminCredentialRef.off();
   adminCredentialRef = undefined;
   adminCredentialFingerprint = "";
@@ -2157,7 +2144,7 @@ function reportsPage() {
 function noticesPage() {
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
     <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal (direct REST · no backend)</h2><p>App ID <code>${escapeHtml(ONESIGNAL_APP_ID)}</code>. REST key is embedded in admin.js. Push IDs from daily-market-hub <code>All Users/{phone}/push</code>.</p></div></div>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal server sender</h2><p>Sends go through the authenticated PHP endpoint. Player IDs are read from daily-market-hub <code>All Users/{phone}/push</code> or the primary DATA record.</p></div></div>
       <div class="button-row"><button class="button primary" type="button" data-action="test-broadcast">Test broadcast</button>
       <button class="button" type="button" data-page="push-notify">Compose message</button></div>
     </section>`;
@@ -2166,7 +2153,7 @@ function noticesPage() {
 function pushNotifyPage() {
   const players = (data.players || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const options = players.map(p => `<option value="${escapeHtml(p.mobile)}">${escapeHtml(p.name)} · ${escapeHtml(p.mobile)}</option>`).join("");
-  return `${pageHeading("Push notifications", "Send OneSignal messages with the REST API key (no backend).")}
+  return `${pageHeading("Push notifications", "Send OneSignal messages securely through the server sender.")}
     <section class="panel">
       <div class="panel-head"><div><h2>Broadcast to all</h2><p>Sends to OneSignal segment <strong>All</strong>.</p></div></div>
       <form id="push-broadcast-form">
@@ -3184,7 +3171,7 @@ function requestManualPayment() {
 }
 
 function publishBroadcast() {
-  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Sends a push notification to all subscribed users via OneSignal REST (no backend).</div></div></div>`, async (form) => {
+  modal("Compose broadcast", `<div class="form-grid"><div class="form-field full"><label>Broadcast title</label><input class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label>Message</label><textarea class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea><div class="hint">Sends a push notification to all subscribed users through the secure server sender.</div></div></div>`, async (form) => {
     const heading = String(form.get("title") || "").trim();
     const message = String(form.get("message") || "").trim();
     if (!heading || !message) {
@@ -3202,16 +3189,49 @@ function publishBroadcast() {
   }, { submitLabel: "Save & send" });
 }
 
-/** Direct OneSignal REST — no PHP / backend. */
+async function requestBroadcast(action, payload = {}) {
+  const response = await fetch(BROADCAST_ENDPOINT, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("The notification server returned an invalid response.");
+  }
+  if (!result || typeof result !== "object") {
+    throw new Error("The notification server returned an invalid response.");
+  }
+  if (!response.ok || result.ok !== true) {
+    throw new Error(result.error || `Notification request failed (HTTP ${response.status}).`);
+  }
+  return result;
+}
+
+async function establishBroadcastSession(phone, password) {
+  await requestBroadcast("login", { phone, password });
+  broadcastSessionEstablished = true;
+  return requestBroadcast("status");
+}
+
+function closeBroadcastSession() {
+  if (!broadcastSessionEstablished) return;
+  broadcastSessionEstablished = false;
+  void requestBroadcast("logout").catch(error => {
+    console.warn(`Could not close the notification session: ${error.message}`);
+  });
+}
+
 async function sendPushBroadcast(heading, message, { subscriptionId = "", silent = false } = {}) {
   try {
-    let result;
-    if (subscriptionId) {
-      result = await onesignalToPlayerIds([subscriptionId], heading, message);
-    } else {
-      result = await onesignalBroadcast(heading, message);
-    }
-    const recipients = result?.recipients ?? (subscriptionId ? 1 : "all");
+    const result = subscriptionId
+      ? await onesignalToPlayerIds([subscriptionId], heading, message)
+      : await onesignalBroadcast(heading, message);
+    const recipients = Number(result?.recipients) || 0;
+    if (!recipients) throw new Error("OneSignal accepted no subscribed recipients. Check the app ID and player subscription.");
     if (!silent) toast(`Push notification sent to ${recipients} recipient(s).`);
     return true;
   } catch (error) {
@@ -3570,7 +3590,11 @@ document.addEventListener("click", (event) => {
     case "broadcast": publishBroadcast(); break;
     case "test-broadcast":
       void onesignalBroadcast("A2Morning", "Test broadcast from admin.")
-        .then(() => toast("Test broadcast sent (direct OneSignal REST)."))
+        .then(result => {
+          const recipients = Number(result?.recipients) || 0;
+          if (!recipients) throw new Error("OneSignal accepted no subscribed recipients.");
+          toast(`Test broadcast sent to ${recipients} recipient(s).`);
+        })
         .catch(err => toast(`Test broadcast failed: ${err.message}`, true));
       break;
     case "close-modal": document.getElementById("modal-root").innerHTML = ""; break;
@@ -3602,7 +3626,15 @@ document.getElementById("admin-login-form").addEventListener("submit", async (ev
   errorElement.textContent = "";
   try {
     const adminCredentials = await verifyAdminLogin(phone, password);
-    // Push uses direct OneSignal REST from the browser (no PHP/backend session).
+    try {
+      const sender = await establishBroadcastSession(phone, password);
+      if (!sender.configured) {
+        toast("Admin signed in, but the OneSignal REST key is not configured on the server.", true);
+      }
+    } catch (error) {
+      console.warn(`Could not initialize the OneSignal server session: ${error.message}`);
+      toast(`Admin signed in, but push notifications are unavailable: ${error.message}`, true);
+    }
     localStorage.setItem(ADMIN_SESSION_KEY, "verified");
     localStorage.setItem(ADMIN_CREDENTIAL_FINGERPRINT_KEY, adminCredentials.credentialFingerprint);
     establishAdminHistory();
