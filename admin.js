@@ -20,8 +20,8 @@ const expertGuessingFirebaseConfig = {
 };
 const resultChartDatabaseUrl = expertGuessingFirebaseConfig.databaseURL;
 
-// The REST API key stays on the PHP server; browser sends use its authenticated endpoint.
-const BROADCAST_ENDPOINT = new URL("onesignal.php", document.currentScript?.src || document.baseURI).href;
+// The REST API key stays in Vercel environment variables; browser sends use the same-origin API.
+const BROADCAST_ENDPOINT = new URL("/api/onesignal", window.location.origin).href;
 let broadcastSessionEstablished = false;
 // Push player IDs live on a2moring (not the main website data tree).
 const PUSH_HUB_CONFIG = {
@@ -2144,7 +2144,7 @@ function reportsPage() {
 function noticesPage() {
   return `${pageHeading("Notices", "Edit the notice shown to players or create an announcement.", button("Send broadcast", "broadcast", "primary"))}
     <section class="panel"><div class="panel-head"><div><h2>Player notice</h2></div></div><form id="notice-form"><div class="form-grid"><div class="form-field full"><label for="notice-title">Title</label><input id="notice-title" class="field" name="title" maxlength="80" value="${escapeHtml(data.settings.noticeTitle)}" required></div><div class="form-field full"><label for="notice-message">Message</label><textarea id="notice-message" class="textarea" name="message" rows="4" maxlength="500" required>${escapeHtml(data.settings.noticeMessage)}</textarea></div></div><div class="button-row" style="margin-top:15px"><button class="button primary" type="submit">Update notice &amp; notify users</button><button class="button" type="button" data-action="broadcast">Compose broadcast</button></div></form></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal server sender</h2><p>Sends go through the authenticated PHP endpoint. Player IDs are read from daily-market-hub <code>All Users/{phone}/push</code> or the primary DATA record.</p></div></div>
+    <section class="panel" style="margin-top:15px"><div class="panel-head"><div><h2>OneSignal server sender</h2><p>Sends go through the authenticated serverless API. Player IDs are read from daily-market-hub <code>All Users/{phone}/push</code> or the primary DATA record.</p></div></div>
       <div class="button-row"><button class="button primary" type="button" data-action="test-broadcast">Test broadcast</button>
       <button class="button" type="button" data-page="push-notify">Compose message</button></div>
     </section>`;
