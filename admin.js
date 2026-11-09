@@ -2625,7 +2625,7 @@ function playerModal(player) {
     const mobile = String(form.get("mobile")).trim();
     const duplicate = data.players.find((item) => item.mobile === mobile && item.id !== existing.id);
     if (duplicate) return toast("A player with this mobile number already exists.", true), false;
-    const record = { ...existing, name, mobile, balance: Number(form.get("balance")), status: form.get("status"), websiteVisible: item.websiteVisible !== false, approved: form.has("approved") };
+    const record = { ...existing, name, mobile, balance: Number(form.get("balance")), status: form.get("status"), approved: form.has("approved") };
     if (isEdit) Object.assign(player, record);
     else data.players.unshift({ ...record, id: `p-${Date.now()}`, joined: new Date().toLocaleDateString("en-CA"), played: 0, totalAdded: 0, totalWithdrawn: 0 });
     persist(isEdit ? "Player updated." : "Player added.");
@@ -2868,7 +2868,7 @@ function marketModal(market) {
       legacySource: primarySource,
       legacyKey: legacyEntries[primarySource],
       open: String(form.get("open") || ""),
-      close: String(form.get("close") || ""),
+      close: String(form.get("close") || ""), websiteVisible: item.websiteVisible !== false,
       position: Number(form.get("position")),
       status: form.get("status"),
     });
