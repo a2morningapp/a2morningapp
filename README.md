@@ -11,3 +11,7 @@ Bet entry uses the site's existing browser-side Firebase write path. Number, ses
 Gateway deposits require `payment-backend/hostinger/payment-api.php` on a PHP-capable host and `Admin/Admin/payment_api_url` set to its HTTPS URL. Checkout is displayed in an in-page iframe; the configured gateway must allow iframe embedding. Keep `sridevi-payment-config.json` and `sridevi-mysql-config.json` in the private directory expected by the endpoint, outside the public web root.
 
 The admin console also contains a PHP endpoint for OneSignal broadcasts; that endpoint needs a PHP-capable host and its allowed-host list configured for the deployed website domain.
+
+The admin Markets page can hide or restore a market on the player website without deleting its record. This stores `websiteVisible` in the legacy market metadata; deploy the matching admin and `site-app.webjs` changes together for the player list to honor it.
+
+The admin Markets page can hide or restore a market on the player website without deleting its record. This stores `websiteVisible` in the legacy market metadata; deploy the matching admin and `WebPlay/WebPlay/web-app.js` changes together for the player list to honor it.
