@@ -685,7 +685,7 @@ function normalizeLegacyData(root) {
       const entry = {
         id: marketIdentity,
         name,
-        type: marketTypeFromName(name),
+        type: marketTypeFromName(name), websiteVisible: marketMetadata.websiteVisible !== false,
         open: String(fields[1] || ""),
         close: String(fields[2] || ""),
         status: /close|stop|off/i.test(statusValue) ? "Closed" : "Open",
@@ -1535,7 +1535,7 @@ function legacyUpdatesFor(changed, previous) {
       fields[8] = JSON.stringify({
         id: market.id,
         days: normalizedMarketDays(market.days),
-        resultDate: market.resultDate || "",
+        resultDate: market.resultDate || "", websiteVisible: market.websiteVisible !== false,
       });
       for (const [source, key] of Object.entries(entries)) {
         updates[`${source}/${key}`] = JSON.stringify(fields);
@@ -1927,7 +1927,7 @@ function marketsPage() {
       const result = market.resultDate === localDateKey() && !marketResultWasReset(market)
         ? market.result
         : market.type === "Starline" ? "### - #" : "### - ## - ###";
-      return `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)} · ${escapeHtml(marketDaysLabel(market.days || marketDaysForSource(market.legacySource || "GAMES")))}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${resultBreakdownMarkup(result)}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`;
+      return `<article class="market-card"><div class="market-card-top"><div><h3>${escapeHtml(market.name)}</h3><p>${escapeHtml(market.type)} · ${escapeHtml(marketDaysLabel(market.days || marketDaysForSource(market.legacySource || "GAMES")))}</p></div>${statusTag(market.status)}</div><div class="market-details"><span>◷ ${escapeHtml(market.open)} – ${escapeHtml(market.close)}</span><span>Position ${escapeHtml(market.position)}</span></div><div class="result-display">${resultBreakdownMarkup(result)}</div><div class="button-row" style="margin-top:13px"><button class="button small" data-action="edit-market" data-id="${escapeHtml(market.id)}">Edit market</button><button class="button small" data-action="edit-result" data-id="${escapeHtml(market.id)}">Update result</button><button class="button small ${market.status === "Open" ? "danger" : "success"}" data-action="toggle-market" data-id="${escapeHtml(market.id)}">${market.status === "Open" ? "Close" : "Open"}</button><button class="button small ${market.websiteVisible === false ? "success" : ""}" data-action="toggle-market-visibility" data-id="${escapeHtml(market.id)}">${market.websiteVisible === false ? "Show on website" : "Hide from website"}</button><button class="button small danger" data-action="delete-market" data-id="${escapeHtml(market.id)}">Delete</button></div></article>`;
     }).join("") || `<div class="panel empty-state">No markets added yet.</div>`}</div>`;
 }
 
@@ -2461,7 +2461,7 @@ function playerAppPage() {
     <div class="grid overview-grid"><section class="panel"><div class="panel-head"><div><h2>New entry</h2><p>Choose a game, market, session, and points.</p></div></div>
       ${playerSelect()}
       <form id="bet-add-form" style="margin-top:12px"><div class="form-grid">
-        <div class="form-field"><label for="bet-market">Market</label><select class="select" id="bet-market" name="market" required>${data.markets.map((market) => `<option value="${escapeHtml(market.id)}">${escapeHtml(market.name)} · ${escapeHtml(market.status)}</option>`).join("")}</select></div>
+        <div class="form-field"><label for="bet-market">Market</label><select class="select" id="bet-market" name="market" required>${data.markets.filter((market) => market.websiteVisible !== false).map((market) => `<option value="${escapeHtml(market.id)}">${escapeHtml(market.name)} · ${escapeHtml(market.status)}</option>`).join("")}</select></div>
         <div class="form-field"><label for="bet-session">Session</label><select class="select" id="bet-session" name="session"><option>Open</option><option>Close</option></select></div>
         <div class="form-field full"><label for="bet-type">Game type</label><select class="select" id="bet-type" name="type">${gameTypes.map(([name]) => `<option>${name}</option>`).join("")}</select></div>
         <div class="form-field"><label for="bet-number">Number</label><input class="field" id="bet-number" name="number" placeholder="Enter number" required></div>
@@ -2469,7 +2469,7 @@ function playerAppPage() {
       </div><div class="button-row" style="margin-top:13px"><button class="button primary" type="submit">＋ Add to slip</button></div></form>
       <div class="panel-head" style="margin-top:21px"><div><h2>Bet slip <span class="nav-count">${betSlip.length}</span></h2><p>${betSlip.length} entr${betSlip.length === 1 ? "y" : "ies"}</p></div><strong>${money(slipTotal)}</strong></div>
       ${betSlip.length ? `<div class="table-wrap"><table><thead><tr><th>Market</th><th>Session</th><th>Game</th><th>Number</th><th>Points</th><th></th></tr></thead><tbody>${betSlip.map((entry, index) => `<tr><td>${escapeHtml(data.markets.find((item) => item.id === entry.marketId)?.name || "Removed market")}</td><td>${escapeHtml(entry.session)}</td><td>${escapeHtml(entry.type)}</td><td><strong>${escapeHtml(entry.number)}</strong></td><td>${money(entry.points)}</td><td><button class="button small danger" data-action="remove-bet" data-index="${index}">Remove</button></td></tr>`).join("")}</tbody></table></div><div class="button-row" style="justify-content:flex-end;margin-top:13px"><button class="button" data-action="clear-slip">Clear slip</button><button class="button primary" data-action="place-bets">Submit · ${money(slipTotal)}</button></div>` : `<div class="empty-state">Your bet slip is empty. Add a game above to continue.</div>`}
-    </section><aside class="panel"><div class="panel-head"><div><h2>Account summary</h2><p>${escapeHtml(player?.name || "No player selected")}</p></div></div><div class="stat-value">${money(player?.balance)}</div><div class="stat-foot">Available wallet balance</div><div class="settings-row" style="margin-top:15px"><div><strong>Market status</strong><small>Open markets accept entries</small></div></div>${marketRows(data.markets.filter((market) => market.status === "Open"))}<div class="button-row" style="margin-top:12px">${button("Deposit / withdraw", "go-player-account")}${button("Game activity", "go-player-history")}</div><p class="stat-foot" style="line-height:1.6;margin-top:14px">Number format: SD 0–9, DD 00–99, pana 3 digits, sangam uses two numbers. Live odds and wager settlement are not connected in this preview.</p></aside></div>`;
+    </section><aside class="panel"><div class="panel-head"><div><h2>Account summary</h2><p>${escapeHtml(player?.name || "No player selected")}</p></div></div><div class="stat-value">${money(player?.balance)}</div><div class="stat-foot">Available wallet balance</div><div class="settings-row" style="margin-top:15px"><div><strong>Market status</strong><small>Open markets accept entries</small></div></div>${marketRows(data.markets.filter((market) => market.websiteVisible !== false && market.status === "Open"))}<div class="button-row" style="margin-top:12px">${button("Deposit / withdraw", "go-player-account")}${button("Game activity", "go-player-history")}</div><p class="stat-foot" style="line-height:1.6;margin-top:14px">Number format: SD 0–9, DD 00–99, pana 3 digits, sangam uses two numbers. Live odds and wager settlement are not connected in this preview.</p></aside></div>`;
 }
 
 function playerAccountPage() {
@@ -2625,7 +2625,7 @@ function playerModal(player) {
     const mobile = String(form.get("mobile")).trim();
     const duplicate = data.players.find((item) => item.mobile === mobile && item.id !== existing.id);
     if (duplicate) return toast("A player with this mobile number already exists.", true), false;
-    const record = { ...existing, name, mobile, balance: Number(form.get("balance")), status: form.get("status"), approved: form.has("approved") };
+    const record = { ...existing, name, mobile, balance: Number(form.get("balance")), status: form.get("status"), websiteVisible: item.websiteVisible !== false, approved: form.has("approved") };
     if (isEdit) Object.assign(player, record);
     else data.players.unshift({ ...record, id: `p-${Date.now()}`, joined: new Date().toLocaleDateString("en-CA"), played: 0, totalAdded: 0, totalWithdrawn: 0 });
     persist(isEdit ? "Player updated." : "Player added.");
@@ -3523,7 +3523,7 @@ document.addEventListener("click", (event) => {
       }
       const invalidEntry = betSlip.some((entry) => {
         const selectedMarket = data.markets.find((item) => item.id === entry.marketId);
-        return !selectedMarket || selectedMarket.status !== "Open" || !(entry.session === "Open" ? data.settings.openBets : data.settings.closeBets);
+        return !selectedMarket || selectedMarket.websiteVisible === false || selectedMarket.status !== "Open" || !(entry.session === "Open" ? data.settings.openBets : data.settings.closeBets);
       });
 
       if (invalidEntry) {
@@ -3573,7 +3573,7 @@ document.addEventListener("click", (event) => {
         render();
       }
       break;
-    case "delete-market":
+    case "toggle-market-visibility": if (market) { market.websiteVisible = market.websiteVisible === false; persist(`${market.name} is ${market.websiteVisible ? "visible on" : "hidden from"} the website.`); render(); } break; case "delete-market":
       if (market && window.confirm(`Delete ${market.name}? This cannot be undone.`)) {
         data.markets = data.markets.filter((item) => item.id !== market.id);
         persist("Market deleted.");
@@ -3833,7 +3833,7 @@ document.addEventListener("submit", (event) => {
       toast("This account is not approved to place games.", true);
       return;
     }
-    if (!market || market.status !== "Open") {
+    if (!market || market.websiteVisible === false || market.status !== "Open") {
       toast("Choose a market that is currently open.", true);
       return;
     }
