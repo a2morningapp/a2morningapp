@@ -2030,7 +2030,7 @@ function normalizeMarkets(bucket) {
   for (const [id, rawValue] of Object.entries(bucket)) {
     if (id === "x") continue;
     const game = decodeFirebaseValue(rawValue);
-    if (!Array.isArray(game) || !game[0]) continue;
+    if (!Array.isArray(game) || !game[0] || decodeFirebaseValue(game[8])?.websiteVisible === false) continue;
     const name = String(game[0]).trim();
     const key = name.toLocaleUpperCase();
     if (marketsByName.has(key)) continue;
