@@ -12,6 +12,8 @@ Gateway deposits require `payment-backend/hostinger/payment-api.php` on a PHP-ca
 
 The admin console also contains a PHP endpoint for OneSignal broadcasts; that endpoint needs a PHP-capable host and its allowed-host list configured for the deployed website domain.
 
+The player Contact Support page and the admin Support chats page use the Web Result Realtime Database: conversation messages are at `SupportChats/conversations/{phone}`, inbox summaries at `SupportChats/inbox/{phone}`, and the editable first-message notice at `SupportChats/settings/waitingMessage`. Admin replies are pushed to the player's registered OneSignal subscription. Both website and admin files must be deployed together. The existing app login is not Firebase Authentication, so phone-number paths alone do not prove a user's identity; review the Web Result database rules and add server-side authorization before storing private account details in chat.
+
 The admin Markets page can hide or restore a market on the player website without deleting its record. This stores `websiteVisible` in the legacy market metadata; deploy the matching admin and `site-app.webjs` changes together for the player list to honor it.
 
 The admin Markets page can hide or restore a market on the player website without deleting its record. This stores `websiteVisible` in the legacy market metadata; deploy the matching admin and `WebPlay/WebPlay/web-app.js` changes together for the player list to honor it.

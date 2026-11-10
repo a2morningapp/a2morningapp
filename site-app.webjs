@@ -198,6 +198,17 @@ const DEFAULT_WITHDRAWAL_WINDOWS = {
   evening: { open: "18:45", close: "21:00" }
 };
 const EXPERT_GUESSING_DATABASE_URL = "https://a2morning-web-result-default-rtdb.firebaseio.com";
+const SUPPORT_CHAT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCGqJ1XvEYbgJ_eN5OEuzAymc3E4wKr8eI",
+  authDomain: "a2morning-web-result.firebaseapp.com",
+  databaseURL: EXPERT_GUESSING_DATABASE_URL,
+  projectId: "a2morning-web-result",
+  storageBucket: "a2morning-web-result.firebasestorage.app",
+  messagingSenderId: "807940358876",
+  appId: "1:807940358876:web:37d5de4963837b8783aa19",
+  measurementId: "G-FD7MK1CWCK"
+};
+const DEFAULT_SUPPORT_WAITING_MESSAGE = "Please wait. An admin will reply as soon as possible.";
 const state = {
   authMode: "login",
   language: "en",
@@ -243,6 +254,10 @@ const state = {
   withdrawalDialogVisible: false,
   insufficientWithdrawalAmount: null,
   supportDialogVisible: false,
+  supportChatMessages: [],
+  supportChatWaitingMessage: DEFAULT_SUPPORT_WAITING_MESSAGE,
+  supportChatError: "",
+  supportChatSending: false,
   category: "Main",
   featureMarketPage: false,
   selectedGame: "Single",
@@ -284,6 +299,9 @@ const state = {
 const realtimeSources = new Map();
 const realtimeTimers = new Map();
 const realtimeValues = new Map();
+let supportChatConversationRef;
+let supportChatSettingsRef;
+let supportChatSubscribedPhone = "";
 let marketDayTimer = 0;
 let realtimeUserPhone = "";
 let activeMarketBucket = "";
@@ -1492,6 +1510,7 @@ function logout() {
   });
   activePaymentChecks.clear();
   pageHistory.length = 0;
+  stopSupportChatSubscriptions();
   if (state.user?.phone) {
     void dbPut(`${DATABASE_ROOTS.users}/${phonePath(state.user.phone)}/push`, null)
       .catch(error => console.error("Could not clear the signed-out device's push subscription.", error));
@@ -2596,6 +2615,7 @@ function bumpNonHomePageText(root) {
 }
 
 async function renderPage() {
+  syncSupportChatSubscriptions();
   const root = query("#page-content");
   const renderers = {
     home: renderHome,
@@ -3129,90 +3149,212 @@ function renderSupportDialog() {
   </div>`;
 }
 
-function renderSupportPage() {
-  const contact = configuredSupportContact();
-  const hasWhatsApp = Boolean(contact);
-  const hasTelegram = isConfiguredExternalUrl(state.telegramUrl);
-  const hasGroup = isConfiguredExternalUrl(state.whatsappGroupUrl);
-  const cards = [
-    {
-      title: "Telegram Support",
-      description: "Get instant help from our support team on Telegram.",
-      action: "open-telegram",
-      icon: "➤",
-      color: "telegram",
-      button: "JOIN NOW",
-      enabled: hasTelegram,
-      recommended: true
-    },
-    {
-      title: "WhatsApp Support",
-      description: "Chat with our support team on WhatsApp.",
-      action: "open-whatsapp",
-      icon: "◉",
-      color: "whatsapp",
-      button: "CHAT NOW",
-      enabled: hasWhatsApp
-    },
-    {
-      title: "Live Chat",
-      description: "Chat live with our support team.",
-      action: "open-whatsapp",
-      message: "Hello, I need live support with my Sridevi Matka account.",
-      icon: "●",
-      color: "live-chat",
-      button: "START CHAT",
-      enabled: hasWhatsApp
-    },
-    {
-      title: "Call Support",
-      description: contact ? "Talk to our support team directly." : "A support phone number has not been configured.",
-      href: contact ? `tel:${contact.tel}` : "",
-      icon: "☎",
-      color: "call",
-      button: contact ? contact.local : "NOT CONFIGURED",
-      enabled: Boolean(contact)
-    },
-    {
-      title: "WhatsApp Group",
-      description: "Join our official WhatsApp group for updates and support.",
-      action: "open-whatsapp-group",
-      icon: "♧",
-      color: "group",
-      button: "JOIN GROUP",
-      enabled: hasGroup
+function supportChatDatabase() {
+  if (!window.firebase?.database) throw new Error("Live support is temporarily unavailable.");
+  const app = firebase.apps.find(item => item.name === "a2morning-support-chat")
+    || firebase.initializeApp(SUPPORT_CHAT_FIREBASE_CONFIG, "a2morning-support-chat");
+  return firebase.database(app);
+}
+
+function supportChatPath(phone) {
+  const mobile = String(phone || "").replace(/\D/g, "");
+  if (!/^\d{10}$/.test(mobile)) throw new Error("Sign in again to open your support chat.");
+  return `SupportChats/conversations/${mobile}`;
+}
+
+function supportChatInboxPath(phone) {
+  const mobile = String(phone || "").replace(/\D/g, "");
+  if (!/^\d{10}$/.test(mobile)) throw new Error("Sign in again to open your support chat.");
+  return `SupportChats/inbox/${mobile}`;
+}
+
+function supportChatMessageMarkup(message) {
+  const sender = ["admin", "system"].includes(message.sender) ? message.sender : "user";
+  const date = new Date(Number(message.timestamp) || Date.parse(message.timestamp) || Date.now());
+  const time = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return `<article class="support-chat-message ${sender}">
+    ${sender === "system" ? "" : `<small>${sender === "admin" ? "A2Morning Support" : "You"}</small>`}
+    <p>${safeText(message.text || "")}</p><time>${safeText(time)}</time>
+  </article>`;
+}
+
+function updateSupportChatMessages() {
+  const thread = query(".support-chat-thread");
+  if (!thread) return;
+  const wasNearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 70;
+  thread.innerHTML = state.supportChatMessages.length
+    ? state.supportChatMessages.map(supportChatMessageMarkup).join("")
+    : `<div class="support-chat-empty"><span aria-hidden="true">✦</span><strong>How can we help?</strong><p>Send a message and our team will get back to you here.</p><small>${safeText(state.supportChatWaitingMessage)}</small></div>`;
+  if (wasNearBottom || !state.supportChatMessages.length) thread.scrollTop = thread.scrollHeight;
+}
+
+function stopSupportChatSubscriptions() {
+  supportChatConversationRef?.off();
+  supportChatSettingsRef?.off();
+  supportChatConversationRef = undefined;
+  supportChatSettingsRef = undefined;
+  supportChatSubscribedPhone = "";
+  state.supportChatMessages = [];
+  state.supportChatError = "";
+}
+
+function syncSupportChatSubscriptions() {
+  const phone = state.page === "support" ? String(state.user?.phone || "") : "";
+  if (!phone) {
+    if (supportChatSubscribedPhone) stopSupportChatSubscriptions();
+    return;
+  }
+  if (supportChatSubscribedPhone === phone) return;
+  stopSupportChatSubscriptions();
+  supportChatSubscribedPhone = phone;
+  try {
+    const db = supportChatDatabase();
+    supportChatConversationRef = db.ref(supportChatPath(phone));
+    supportChatSettingsRef = db.ref("SupportChats/settings/waitingMessage");
+    supportChatConversationRef.on("value", snapshot => {
+      if (state.user?.phone !== phone || state.page !== "support") return;
+      const conversation = snapshot.val() || {};
+      state.supportChatMessages = Object.values(conversation.messages || {})
+        .filter(message => message && typeof message.text === "string")
+        .sort((left, right) => Number(left.timestamp) - Number(right.timestamp));
+      if (conversation.unreadForUser) {
+        const updates = {};
+        updates[`${supportChatPath(phone)}/unreadForUser`] = false;
+        updates[`${supportChatInboxPath(phone)}/unreadForUser`] = false;
+        void supportChatDatabase().ref().update(updates)
+          .catch(error => console.error("Could not mark support reply as read:", error));
+      }
+      updateSupportChatMessages();
+    }, error => {
+      state.supportChatError = error.message || "Could not load your support messages.";
+      updateSupportChatMessages();
+      notify(state.supportChatError, "error");
+    });
+    supportChatSettingsRef.on("value", snapshot => {
+      state.supportChatWaitingMessage = String(snapshot.val() || DEFAULT_SUPPORT_WAITING_MESSAGE).slice(0, 250);
+      updateSupportChatMessages();
+    }, error => console.error("Could not load the support welcome message:", error));
+  } catch (error) {
+    state.supportChatError = error.message || "Could not connect to live support.";
+    notify(state.supportChatError, "error");
+  }
+}
+
+async function ensureSupportConversation(db, phone) {
+  const ref = db.ref(supportChatPath(phone));
+  const existing = await ref.once("value");
+  if (existing.exists()) {
+    const inbox = await db.ref(supportChatInboxPath(phone)).once("value");
+    if (!inbox.exists()) {
+      const current = existing.val() || {};
+      await db.ref(supportChatInboxPath(phone)).set({
+        phone,
+        name: String(current.name || state.user?.name || "Player").slice(0, 60),
+        createdAt: Number(current.createdAt) || Date.now(),
+        updatedAt: Number(current.updatedAt) || Date.now(),
+        lastMessage: String(current.lastMessage || ""),
+        lastSender: String(current.lastSender || "system"),
+        unreadForAdmin: Boolean(current.unreadForAdmin),
+        unreadForUser: Boolean(current.unreadForUser),
+        status: String(current.status || "open")
+      });
     }
-  ];
-  const available = hasWhatsApp || hasTelegram || hasGroup;
-  return `<section class="madhur-support-page">
-    <header class="madhur-support-header">
-      <div class="madhur-support-brand"><img src="a2morning-logo.png" alt="A2 Morning"></div>
-      <span class="madhur-support-headset" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v-6h4M4 13h4v6H6a2 2 0 0 1-2-2z"/><path d="M8 20h5"/></svg></span>
+    return ref;
+  }
+  const settings = await db.ref("SupportChats/settings/waitingMessage").once("value");
+  const waitingMessage = String(settings.val() || DEFAULT_SUPPORT_WAITING_MESSAGE).slice(0, 250);
+  const messageKey = ref.child("messages").push().key;
+  const timestamp = Date.now();
+  const initialConversation = {
+    phone,
+    name: String(state.user?.name || "Player").slice(0, 60),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    lastMessage: waitingMessage,
+    lastSender: "system",
+    unreadForAdmin: true,
+    unreadForUser: false,
+    status: "open",
+    messages: {
+      [messageKey]: { sender: "system", text: waitingMessage, timestamp }
+    }
+  };
+  await ref.transaction(current => current || initialConversation, undefined, false);
+  await db.ref(supportChatInboxPath(phone)).transaction(current => current || {
+    phone,
+    name: initialConversation.name,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    lastMessage: waitingMessage,
+    lastSender: "system",
+    unreadForAdmin: true,
+    unreadForUser: false,
+    status: "open"
+  }, undefined, false);
+  return ref;
+}
+
+async function sendSupportChatMessage(event) {
+  event.preventDefault();
+  const form = event.target;
+  const textarea = form.elements.message;
+  const message = String(textarea?.value || "").trim();
+  if (!message || state.supportChatSending || !state.user) return;
+  if (message.length > 2000) {
+    notify("Messages must be 2,000 characters or fewer.", "error");
+    return;
+  }
+  state.supportChatSending = true;
+  const submit = form.querySelector('[type="submit"]');
+  if (submit) submit.disabled = true;
+  try {
+    const phone = String(state.user.phone);
+    const db = supportChatDatabase();
+    const conversation = await ensureSupportConversation(db, phone);
+    const key = conversation.child("messages").push().key;
+    const timestamp = Date.now();
+    const updates = {};
+    updates[`${supportChatPath(phone)}/messages/${key}`] = {
+      sender: "user", text: message, timestamp
+    };
+    updates[`${supportChatPath(phone)}/name`] = String(state.user.name || "Player").slice(0, 60);
+    updates[`${supportChatPath(phone)}/phone`] = phone;
+    updates[`${supportChatPath(phone)}/updatedAt`] = timestamp;
+    updates[`${supportChatPath(phone)}/lastMessage`] = message;
+    updates[`${supportChatPath(phone)}/lastSender`] = "user";
+    updates[`${supportChatPath(phone)}/unreadForAdmin`] = true;
+    updates[`${supportChatPath(phone)}/status`] = "open";
+    updates[`${supportChatInboxPath(phone)}/name`] = String(state.user.name || "Player").slice(0, 60);
+    updates[`${supportChatInboxPath(phone)}/phone`] = phone;
+    updates[`${supportChatInboxPath(phone)}/updatedAt`] = timestamp;
+    updates[`${supportChatInboxPath(phone)}/lastMessage`] = message;
+    updates[`${supportChatInboxPath(phone)}/lastSender`] = "user";
+    updates[`${supportChatInboxPath(phone)}/unreadForAdmin`] = true;
+    updates[`${supportChatInboxPath(phone)}/status`] = "open";
+    await db.ref().update(updates);
+    textarea.value = "";
+  } catch (error) {
+    notify(error.message || "Message could not be sent. Please try again.", "error");
+  } finally {
+    state.supportChatSending = false;
+    if (submit?.isConnected) submit.disabled = false;
+  }
+}
+
+function renderSupportPage() {
+  return `<section class="support-chat-page">
+    <header class="support-chat-heading">
+      <span class="support-chat-brand" aria-hidden="true">✦</span>
+      <div><p>PLAYER CARE</p><h1>Chat with support</h1><small><i></i> Messages are delivered live</small></div>
     </header>
-    <div class="madhur-support-content">
-      <section class="madhur-support-hero">
-        <div><h1>Customer Support <span aria-hidden="true">🛡️</span></h1><p>We're here to help you <strong>when you need us</strong></p><small><span aria-hidden="true">🔒</span> Secure &amp; reliable support</small></div>
-        <span class="madhur-support-hero-icon" aria-hidden="true"><svg viewBox="0 0 72 72"><path d="M10 38v-8a26 26 0 0 1 52 0v8"/><rect x="7" y="33" width="12" height="22" rx="6"/><rect x="53" y="33" width="12" height="22" rx="6"/><path d="M59 54c-2 8-11 10-20 10"/><rect x="31" y="58" width="10" height="7" rx="3"/><circle cx="29" cy="31" r="4"/><circle cx="41" cy="31" r="4"/><circle cx="53" cy="31" r="4"/></svg></span>
-      </section>
-      <section class="madhur-support-contact">
-        <div class="madhur-support-contact-heading"><h2>CONTACT US</h2><span class="${available ? "available" : "unavailable"}"><i></i>${available ? "Support channels available" : "Support links not configured"}</span></div>
-        <div class="madhur-support-grid">${cards.map(card => {
-          const element = card.href && card.enabled ? "a" : "button";
-          const attributes = card.href && card.enabled
-            ? `href="${safeText(card.href)}"`
-            : card.enabled
-              ? `data-action="${card.action}"${card.message ? ` data-support-message="${safeText(card.message)}"` : ""}`
-              : "disabled";
-          return `<article class="madhur-support-card ${card.color} ${card.enabled ? "" : "unavailable"} ${card.recommended ? "recommended" : ""}">
-            ${card.recommended ? `<span class="madhur-support-recommended">Recommended</span>` : ""}
-            <span class="madhur-support-card-icon" aria-hidden="true">${card.icon}</span>
-            <h3>${safeText(card.title)}</h3>
-            <p>${safeText(card.description)}</p>
-            <${element} class="madhur-support-card-button" ${element === "button" ? `type="button"` : ""} ${attributes}>${safeText(card.button)}</${element}>
-          </article>`;
-        }).join("")}</div>
-      </section>
-    </div>
+    <section class="support-chat-card" aria-label="Support conversation">
+      <div class="support-chat-card-head"><span class="support-chat-avatar" aria-hidden="true">A</span><div><strong>A2Morning Support</strong><small>We’re here to help</small></div><span class="support-chat-online"><i></i> Live updates</span></div>
+      <div class="support-chat-thread" role="log" aria-live="polite" aria-relevant="additions text">${state.supportChatMessages.map(supportChatMessageMarkup).join("") || `<div class="support-chat-empty"><span aria-hidden="true">✦</span><strong>How can we help?</strong><p>Send a message and our team will get back to you here.</p><small>${safeText(state.supportChatWaitingMessage)}</small></div>`}</div>
+      <form class="support-chat-composer" id="support-chat-form">
+        <textarea id="support-chat-message" name="message" rows="1" maxlength="2000" aria-label="Type a message" placeholder="Type a message…" required></textarea>
+        <button type="submit" aria-label="Send message" ${state.supportChatSending ? "disabled" : ""}><span aria-hidden="true">➤</span></button>
+      </form>
+    </section>
   </section>`;
 }
 
@@ -5225,6 +5367,7 @@ document.addEventListener("input", event => {
 
 function handleSubmit(event) {
   if (event.target.id === "auth-form") submitAuth(event);
+  if (event.target.id === "support-chat-form") void sendSupportChatMessage(event);
   if (event.target.id === "profile-password-form") void changePassword(event);
   if (event.target.id === "bid-form") {
     event.preventDefault();
