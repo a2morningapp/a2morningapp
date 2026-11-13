@@ -2052,22 +2052,39 @@ function normalizeMarkets(bucket) {
     if (!Array.isArray(game) || !game[0]) continue;
     const name = String(game[0]).trim();
     const key = name.toLocaleUpperCase();
-    if (marketsByName.has(key)) continue;
     const resultValue = String(game[6] || "").trim();
     const marketMetadata = decodeFirebaseValue(game[8]);
     const metadata = marketMetadata && typeof marketMetadata === "object" && !Array.isArray(marketMetadata)
       ? marketMetadata : {};
     if (metadata.websiteVisible === false) continue;
-    const category = /starline/i.test(name)
+    const savedCategory = String(metadata.category || "").trim();
+    const category = /^starline$/i.test(savedCategory)
       ? "Starline"
-      : /gali|disawar/i.test(name)
+      : /gali|disawar/i.test(savedCategory)
         ? "Gali / Disawar"
-        : "Main";
+        : /^main(?: market)?$/i.test(savedCategory)
+          ? "Main"
+          : /starline/i.test(name)
+            ? "Starline"
+            : /gali|disawar/i.test(name)
+              ? "Gali / Disawar"
+              : "Main";
+    const categoryUpdatedAt = Date.parse(String(metadata.categoryUpdatedAt || "")) || 0;
+    const existing = marketsByName.get(key);
+    if (existing) {
+      if (categoryUpdatedAt > existing.categoryUpdatedAt) {
+        existing.id = `${category}:${id}:${key}`;
+        existing.category = category;
+        existing.categoryUpdatedAt = categoryUpdatedAt;
+      }
+      continue;
+    }
     const resultParts = resultValue ? resultValue.split(/\s*-\s*/) : [];
     marketsByName.set(key, {
       id: `${category}:${id}:${key}`,
       name,
       category,
+      categoryUpdatedAt,
       open: resultParts[0] || "",
       close: resultParts[2] || "",
       result: resultValue,
