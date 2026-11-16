@@ -2795,6 +2795,24 @@ function legacyGameType(game) {
   return game;
 }
 
+function marketResultForDisplay(market, value) {
+  const result = String(value || "").trim();
+  const parts = result.split(/\s*-\s*/).map(part => part.trim());
+  if (market.category === "Gali / Disawar") {
+    if (/^\d{2}$/.test(result)) return result;
+    if (/^\d{2}$/.test(parts[1] || "")) return parts[1];
+    return "##";
+  }
+  if (market.category === "Starline") {
+    return /^(?:\d{3}|###)\s*-\s*(?:\d|#)$/.test(result) ? result : "### - #";
+  }
+  if (parts.length === 3
+    && /^(?:\d{3}|###)$/.test(parts[0])
+    && /^(?:\d{2}|\d#|#\d|##)$/.test(parts[1])
+    && /^(?:\d{3}|###)$/.test(parts[2])) return parts.join(" - ");
+  return "### - ## - ###";
+}
+
 function marketCards(markets, showAll = false) {
   if (!markets.length) {
     const detail = state.marketLoadError
@@ -2808,9 +2826,10 @@ function marketCards(markets, showAll = false) {
     const isLive = isOpen;
     const resultDate = String(market.resultDate || "").trim();
     const hasCurrentResult = isCurrentMarketResult(resultDate);
-    const placeholder = "### - ## - ###";
+    const placeholder = market.category === "Gali / Disawar" ? "##"
+      : market.category === "Starline" ? "### - #" : "### - ## - ###";
     const rawResult = hasCurrentResult ? market.result || market.raw?.[6] : "";
-    const result = String(rawResult || placeholder).replace(/\s*-\s*/g, " - ");
+    const result = marketResultForDisplay(market, rawResult || placeholder).replace(/\s*-\s*/g, " - ");
     const closed = Boolean(state.closedMarket?.id && state.closedMarket.id === market.id);
     const color = /rajdhani/i.test(market.name) ? "red"
       : /sridevi|madhur/i.test(market.name) ? "purple"
@@ -3643,15 +3662,31 @@ function panelChartDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function panelChartResultParts(record) {
+function panelChartResultParts(record, category = "") {
+  const format = String(record && typeof record === "object"
+    ? record.resultFormat || record.category || category : category).toLowerCase();
   const source = typeof record === "string" ? record
     : record && typeof record === "object"
-      ? record.closeResult || record.openResult || record.result || "" : "";
-  return String(source).split(/\s*-\s*/).map(part => part.trim()).filter(Boolean).slice(0, 3);
+      ? format.includes("gali") || format.includes("disawar")
+        ? record.dailyResult || record.result || ""
+        : format.includes("starline")
+          ? record.openResult || record.result || record.closeResult || ""
+          : record.closeResult || record.openResult || record.result || ""
+      : "";
+  const parts = String(source).split(/\s*-\s*/).map(part => part.trim()).filter(Boolean).slice(0, 3);
+  if (format.includes("gali") || format.includes("disawar")) {
+    const result = String(source).trim();
+    return /^\d{2}$/.test(result) ? [result]
+      : /^\d{2}$/.test(parts[1] || "") ? [parts[1]] : [];
+  }
+  return parts;
 }
 
 function renderPanelChart() {
   const records = state.panelResults && typeof state.panelResults === "object" ? state.panelResults : {};
+  const selectedMarket = state.markets.find((market) => market.name.trim().toLowerCase()
+    === String(state.selectedPanelMarket || "").trim().toLowerCase());
+  const category = selectedMarket?.category || "";
   const validDates = Object.keys(records).filter(date => panelChartDate(date));
   const sortedDates = validDates.map(panelChartDate).sort((left, right) => left - right);
   const today = new Date();
@@ -3670,10 +3705,12 @@ function renderPanelChart() {
       const date = new Date(week);
       date.setDate(date.getDate() + index);
       const record = records[panelChartDateKey(date)];
-      const parts = panelChartResultParts(record);
+      const parts = panelChartResultParts(record, category);
       const updated = Boolean(record?.updatedAt
         && new Date(record.updatedAt).toDateString() === new Date().toDateString());
-      const value = parts.length ? parts.join(" - ") : "### - ## - ###";
+      const missingValue = /gali|disawar/i.test(category) ? "##"
+        : /starline/i.test(category) ? "### - #" : "### - ## - ###";
+      const value = parts.length ? parts.join(" - ") : missingValue;
       return `<td><div class="panel-chart-result ${parts.length ? "" : "missing"} ${updated ? "updated" : ""}">${safeText(value)}</div></td>`;
     }).join("");
     rows += `<tr><th scope="row">${String(week.getDate()).padStart(2, "0")}-${String(week.getMonth() + 1).padStart(2, "0")}-${week.getFullYear()}<br>TO<br>${String(weekEnd.getDate()).padStart(2, "0")}-${String(weekEnd.getMonth() + 1).padStart(2, "0")}-${weekEnd.getFullYear()}</th>${dates}</tr>`;

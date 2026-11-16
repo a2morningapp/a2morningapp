@@ -42,6 +42,16 @@ const adminPersistenceSource = extract(
   "function legacyUpdatesFor(changed, previous) {",
   "\nfunction persist"
 );
+const adminResultFormatSource = extract(
+  adminSource,
+  "function marketResultFormat(market) {",
+  "\nfunction normalizedResultSession"
+);
+const siteChartResultSource = extract(
+  websiteSource,
+  "function panelChartResultParts(record, category = \"\") {",
+  "\nfunction renderPanelChart"
+);
 
 test("website honors the admin market category and falls back for older market records", () => {
   const context = {
@@ -121,7 +131,9 @@ test("deployed website uses the saved Kalyan Morning category", () => {
 test("admin recognizes the three explicit market categories and keeps legacy name fallback", () => {
   const context = {
     normalizedMarketDays: value => value || [],
-    legacyMarketTime: value => value || ""
+    legacyMarketTime: value => value || "",
+    marketResultFormat: market => market.type === "Starline" ? "starline" : "main",
+    marketResultForDisplay: (market, value) => market.type === "Starline" ? "### - #" : value
   };
   vm.runInNewContext(
     `${adminMarketSource}\nglobalThis.normalizeMarketType = normalizeMarketType;\nglobalThis.updateMarketCategory = updateMarketCategory;`,
@@ -158,9 +170,11 @@ test("admin recognizes the three explicit market categories and keeps legacy nam
       days: ["Monday"],
       resultDate: "2026-11-13",
       category: "Starline",
-      categoryUpdatedAt: market.categoryUpdatedAt
+      categoryUpdatedAt: market.categoryUpdatedAt,
+      resultFormat: "starline"
     }
   );
+  assert.equal(market.legacyFields[6], "### - #");
   assert.match(adminSource, /data-market-category/);
   assert.match(adminSource, /name="category"/);
 });
@@ -170,7 +184,11 @@ test("admin persists category metadata to the Firebase market record the website
     marketLegacyEntries: market => market.legacyEntries,
     normalizedMarketDays: value => value || [],
     legacyMarketTime: value => value || "",
-    normalizeMarketType: value => value
+    normalizeMarketType: value => value,
+    marketResultFormat: market => /gali|disawar/i.test(market.type) ? "gali"
+      : /starline/i.test(market.type) ? "starline" : "main",
+    marketResultForDisplay: (market, value) => /gali|disawar/i.test(market.type)
+      ? /^\d{2}$/.test(String(value || "")) ? String(value) : "##" : value
   };
   vm.runInNewContext(
     `${adminPersistenceSource}\nglobalThis.legacyUpdatesFor = legacyUpdatesFor;`,
@@ -205,4 +223,68 @@ test("admin persists category metadata to the Firebase market record the website
   const persistedMetadata = JSON.parse(persistedFields[8]);
   assert.equal(persistedMetadata.category, "Gali / Disawar");
   assert.equal(persistedMetadata.categoryUpdatedAt, "2026-11-13T10:00:00.000Z");
+  assert.equal(persistedFields[6], "##");
+  assert.equal(persistedMetadata.resultFormat, "gali");
+});
+
+test("admin formats legacy results by category without changing Gali's one daily Jodi", () => {
+  const context = {
+    normalizeMarketType(value) {
+      return /gali|disawar/i.test(value) ? "Gali / Disawar"
+        : /starline/i.test(value) ? "Starline" : "Main market";
+    },
+    panelSingle(panel) {
+      return /^\d{3}$/.test(String(panel || ""))
+        ? String([...panel].reduce((sum, digit) => sum + Number(digit), 0) % 10) : "";
+    }
+  };
+  vm.runInNewContext(
+    `${adminResultFormatSource}\nglobalThis.marketResultForDisplay = marketResultForDisplay;`,
+    context
+  );
+  assert.equal(
+    context.marketResultForDisplay({ type: "Gali / Disawar" }, "123 - 45 - 678"),
+    "45"
+  );
+  assert.equal(
+    context.marketResultForDisplay({ type: "Gali / Disawar" }, "### - ## - ###"),
+    "##"
+  );
+  assert.equal(
+    context.marketResultForDisplay({ type: "Starline" }, "123"),
+    "123 - 6"
+  );
+  assert.equal(
+    context.marketResultForDisplay({ type: "Main market" }, "123 - 45 - 678"),
+    "123 - 45 - 678"
+  );
+});
+
+test("player panel chart reads a Gali daily result and its legacy Jodi", () => {
+  const context = {};
+  vm.runInNewContext(
+    `${siteChartResultSource}\nglobalThis.panelChartResultParts = panelChartResultParts;`,
+    context
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.panelChartResultParts({
+      resultFormat: "gali",
+      dailyResult: "27"
+    }, "Gali / Disawar"))),
+    ["27"]
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.panelChartResultParts("111 - 27 - 222", "Gali / Disawar"))),
+    ["27"]
+  );
+});
+
+test("public result chart reads the same result database and formats Gali daily entries", () => {
+  const chartSource = fs.readFileSync(
+    path.join(__dirname, "..", "WebPlay", "WebPlay", "web-result.html"),
+    "utf8"
+  );
+  assert.match(chartSource, /a2morning-web-result-default-rtdb\.firebaseio\.com/);
+  assert.match(chartSource, /record\.dailyResult \|\| record\.result/);
+  assert.match(chartSource, /format\.includes\("gali"\)/);
 });
