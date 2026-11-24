@@ -378,7 +378,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   display: block;
   flex: 0 0 min(230px, 40vw);
   width: min(230px, 40vw);
-  aspect-ratio: 436 / 480;
+  aspect-ratio: 1;
   overflow: hidden;
   padding: 0;
   border: 0;
@@ -389,7 +389,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   scroll-snap-align: start;
   -webkit-tap-highlight-color: transparent;
 }
-.aia-feature-card img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.aia-feature-card img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .aia-feature-card:disabled { cursor: default; }
 .aia-feature-card:focus-visible { outline: 3px solid var(--dp-purple); outline-offset: 3px; }
 .aia-home-contact-row {

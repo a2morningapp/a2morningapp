@@ -3051,8 +3051,8 @@ function renderHomeOverview() {
     </div>
     <section class="aia-home-panel">
     <div class="aia-feature-carousel" aria-label="Featured games">
-      <button class="aia-feature-card" type="button" data-action="open-feature-markets" data-feature-category="Starline" aria-label="Sridevi Matka Starline: view markets"><img src="logo-sridevi-starline-live.png" alt="Sridevi Starline. Live. Fast and easy. Play now." width="768" height="768"></button>
-      <button class="aia-feature-card" type="button" data-action="open-feature-markets" data-feature-category="Gali / Disawar" aria-label="Sridevi Matka Gali Disawar: view markets"><img src="logo-sridevi-gali-disawar-blue.png" alt="Sridevi Gali/Disawar. Live. Fast and easy. Play now." width="768" height="768"></button>
+      <button class="aia-feature-card" type="button" data-action="open-feature-markets" data-feature-category="Starline" aria-label="A2Morning Starline: view markets"><img src="a2morning-starline-live.png?v=20261124" alt="Starline. Live. Fast and easy. Play now." width="768" height="768"></button>
+      <button class="aia-feature-card" type="button" data-action="open-feature-markets" data-feature-category="Gali / Disawar" aria-label="A2Morning Gali Disawar: view markets"><img src="a2morning-gali-disawar-blue.png?v=20261124" alt="Gali/Disawar. Live. Fast and easy. Play now." width="768" height="768"></button>
       <button class="aia-feature-card" type="button" data-action="open-matka" data-matka="60" aria-label="Matka 60"><img src="home-matka-60.png" alt="Matka 60" width="872" height="960"></button>
       <button class="aia-feature-card" type="button" data-action="open-matka" data-matka="30" aria-label="Matka 30"><img src="home-matka-30.png" alt="Matka 30" width="872" height="960"></button>
     </div>

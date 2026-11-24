@@ -299,6 +299,13 @@ test("Starline and Gali betting rules expose category-specific game types", () =
   assert.match(adminSource, /Starline and Gali \/ Disawar markets accept Open-session bids only/);
 });
 
+test("both player websites use the supplied A2Morning Starline and Gali feature images", () => {
+  for (const source of [websiteSource, deployedWebsiteSource]) {
+    assert.match(source, /data-feature-category="Starline"[^>]*><img src="a2morning-starline-live\.png\?v=20261124"/);
+    assert.match(source, /data-feature-category="Gali \/ Disawar"[^>]*><img src="a2morning-gali-disawar-blue\.png\?v=20261124"/);
+  }
+});
+
 test("website market search filters cards by name and can be opened from market lists", () => {
   const searchHelper = websiteSource.match(/function marketsMatchingSearch\(markets, query\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(searchHelper, "market search filter must be present");
