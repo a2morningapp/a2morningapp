@@ -75,3 +75,4 @@ test("market chart headers give titles the available width", () => {
   assert.match(styles, /\.panel-chart-page > header\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+44px/);
   assert.match(styles, /\.panel-chart-page > header h1\s*\{[^}]*font-size:\s*clamp\(16px,\s*4vw,\s*20px\)/s);
 });
+

@@ -125,6 +125,46 @@ test("grid options follow the existing game number sets", () => {
   assert.equal(rules.getBetGridOptions("Half Sangam", "128").length, 10);
 });
 
+test("Gali betting hides the session selector and keeps Open internally", () => {
+  const state = {
+    markets: [{ name: "Gali Market", category: "Gali / Disawar" }],
+    selectedMarket: "Gali Market",
+    selectedGame: "Jodi",
+    selectedSession: "Close",
+    maximumEntry: 0,
+    minimumEntry: 0,
+    betDraft: [],
+    balance: 100,
+    maintenance: false,
+    accountBlocked: false,
+    betGridPrimary: ""
+  };
+  const context = {
+    state,
+    marketSessions: () => ["Open"],
+    betDraftTotals: () => ({ total: 0, remaining: 100, shortfall: 0 }),
+    safeText: value => String(value),
+    defaultBetAmount: () => 10,
+    getBetGridOptions: () => [],
+    money: amount => String(amount),
+    gameDisplayName: game => game,
+    legacyGameType: game => game,
+    buildBetSelections: () => []
+  };
+  vm.runInNewContext(
+    `${between("function renderBetting() {", "function renderCharts() {")}\nglobalThis.renderBetting = renderBetting;`,
+    context
+  );
+  const galiMarkup = context.renderBetting();
+  assert.doesNotMatch(galiMarkup, /Select Session|id="bet-session"/);
+  assert.equal(state.selectedSession, "Open");
+
+  state.markets[0].category = "Main";
+  state.selectedSession = "Open";
+  const mainMarkup = context.renderBetting();
+  assert.match(mainMarkup, /Select Session/);
+});
+
 test("bulk game tiles are not included in the playable game list", () => {
   const gameTypes = between("const GAME_TYPES = [", "const GAME_ART = {");
   assert.doesNotMatch(gameTypes, /Single Digit Bulk|Bulk Jodi|Single Pana Bulk|Double Pana Bulk|Triple Pana Bulk/);

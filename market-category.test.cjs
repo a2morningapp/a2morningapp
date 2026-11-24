@@ -5,6 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const websiteSource = fs.readFileSync(path.join(__dirname, "site-app.webjs"), "utf8");
+const websiteStylesSource = fs.readFileSync(path.join(__dirname, "styles.css"), "utf8");
 const deployedWebsiteSource = fs.readFileSync(
   path.join(__dirname, "..", "WebPlay", "WebPlay", "web-app.js"),
   "utf8"
@@ -287,4 +288,35 @@ test("public result chart reads the same result database and formats Gali daily 
   assert.match(chartSource, /a2morning-web-result-default-rtdb\.firebaseio\.com/);
   assert.match(chartSource, /record\.dailyResult \|\| record\.result/);
   assert.match(chartSource, /format\.includes\("gali"\)/);
+});
+
+test("Starline and Gali betting rules expose category-specific game types", () => {
+  assert.match(deployedWebsiteSource, /if \(\/gali\|disawar\/i\.test\(market\?\.category\)\) return \["Jodi"\]/);
+  assert.match(deployedWebsiteSource, /if \(\/starline\/i\.test\(market\?\.category\)\)/);
+  assert.match(websiteSource, /if \(\/gali\|disawar\/i\.test\(market\.category\)\)/);
+  assert.match(adminSource, /if \(format === "gali"\) return \[\["Jodi Digit"/);
+  assert.match(adminSource, /if \(format === "starline"\) return \[/);
+  assert.match(adminSource, /Starline and Gali \/ Disawar markets accept Open-session bids only/);
+});
+
+test("website market search filters cards by name and can be opened from market lists", () => {
+  const searchHelper = websiteSource.match(/function marketsMatchingSearch\(markets, query\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(searchHelper, "market search filter must be present");
+  const context = {};
+  vm.runInNewContext(`${searchHelper}\nglobalThis.marketsMatchingSearch = marketsMatchingSearch;`, context);
+  const markets = [
+    { name: "Kalyan Morning" },
+    { name: "Madhur Night" },
+    { name: "Starline Kalyan" }
+  ];
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.marketsMatchingSearch(markets, "  kalyan "))).map(market => market.name),
+    ["Kalyan Morning", "Starline Kalyan"]
+  );
+  assert.equal(context.marketsMatchingSearch(markets, "").length, 3);
+  assert.match(websiteSource, /data-action="toggle-market-search"/);
+  assert.match(websiteSource, /id="website-market-search" type="search" aria-label="Search markets"/);
+  assert.match(websiteStylesSource, /\.website-market-search\.is-open \{ width: 100%; \}/);
+  assert.match(websiteSource, /marketListSearchRow\(\)[\s\S]*marketCards\(markets, true\)/);
+  assert.match(websiteSource, /marketListSearchRow\(\)[\s\S]*marketCards\(allMarkets, true\)/);
 });

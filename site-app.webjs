@@ -108,6 +108,14 @@ const DP_PANA_SET = new Set(DP_MOTOR_ROWS.flat());
 const TP_PANA_SET = new Set(TP_MOTOR_DIGITS);
 const SANGAM_PANA_SET = new Set([...SP_PANA_SET, ...DP_PANA_SET, ...TP_PANA_SET]);
 const MARKET_CATEGORIES = ["Main", "Starline", "Gali / Disawar"];
+
+function marketGameTypes(market) {
+  if (/gali|disawar/i.test(market?.category)) return ["Jodi"];
+  if (/starline/i.test(market?.category)) {
+    return ["Single", "Single Pana", "Double Pana", "Triple Pana", "SP Motor", "DP Motor", "TP Motor", "SP DP TP"];
+  }
+  return GAME_TYPES;
+}
 const SUPPORTED_LANGUAGES = [
   ["en", "English", "ENGLISH"],
   ["hi", "हिन्दी", "HINDI"],
@@ -260,6 +268,8 @@ const state = {
   supportChatSending: false,
   category: "Main",
   featureMarketPage: false,
+  marketSearchQuery: "",
+  marketSearchOpen: false,
   selectedGame: "Single",
   selectedMarket: "",
   selectedSession: "Open",
@@ -2814,13 +2824,16 @@ function marketResultForDisplay(market, value) {
 }
 
 function marketCards(markets, showAll = false) {
-  if (!markets.length) {
+  const search = String(state.marketSearchQuery || "").trim();
+  const matchingMarkets = marketsMatchingSearch(markets, search);
+  if (!matchingMarkets.length) {
+    if (search) return `<div class="empty-state"><strong>No matching markets</strong>Try a different market name.</div>`;
     const detail = state.marketLoadError
       ? safeText(state.marketLoadError)
       : "Market data will appear here when it is available.";
     return `<div class="empty-state"><strong>No markets available</strong>${detail}</div>`;
   }
-  const visibleMarkets = showAll ? markets : markets.slice(0, 6);
+  const visibleMarkets = showAll ? matchingMarkets : matchingMarkets.slice(0, 6);
   return `<div class="market-grid">${visibleMarkets.map(market => {
     const isOpen = marketSessions(market).length > 0;
     const isLive = isOpen;
@@ -2866,6 +2879,13 @@ function marketCards(markets, showAll = false) {
       </section></div>` : ""}
     </article>`;
   }).join("")}</div>`;
+}
+
+function marketsMatchingSearch(markets, query) {
+  const search = String(query || "").trim().toLocaleLowerCase();
+  return search
+    ? markets.filter(market => String(market.name || "").toLocaleLowerCase().includes(search))
+    : markets;
 }
 
 function marketTimeSeconds(value) {
@@ -2949,6 +2969,11 @@ function marketResultMarkup(result) {
 
 function marketSessions(market) {
   if (state.accountBlocked || !market || /closed/i.test(market.status) || marketClockStatus(market) === "closed") return [];
+  if (/starline|gali|disawar/i.test(market.category)) {
+    if (state.maintenance || !state.openBets) return [];
+    return String(market.raw?.[3]).toUpperCase() === "Y" || market.raw?.[3] === undefined
+      ? ["Open"] : [];
+  }
   const available = ["Open", "Close"].filter((session, index) => {
     if (state.maintenance || !(session === "Open" ? state.openBets : state.closeBets)) return false;
     const enabled = market.raw?.[index + 3];
@@ -2997,8 +3022,20 @@ function activityRows(items, emptyText = "Your recent activity will show here.")
 function renderHome() {
   const markets = marketsForCategory(state.category);
   return `${renderHomeOverview()}
-    <div class="section-head"><h2>${safeText(marketCategoryLabel(state.category))} markets</h2><button class="text-button" type="button" data-action="refresh">↻ Auto Refresh</button></div>
+    <div class="section-head market-section-head"><h2>${safeText(marketCategoryLabel(state.category))} markets</h2><button class="text-button" type="button" data-action="refresh">↻ Auto Refresh</button></div>
+    ${marketListSearchRow()}
     ${marketCards(markets, true)}`;
+}
+
+function marketListSearchRow() {
+  return `<div class="market-list-search-row">${marketSearchControls()}</div>`;
+}
+
+function marketSearchControls() {
+  return `<div class="website-market-search${state.marketSearchOpen ? " is-open" : ""}">
+    ${state.marketSearchOpen ? `<label class="website-market-search-field"><input id="website-market-search" type="search" aria-label="Search markets" value="${safeText(state.marketSearchQuery)}" placeholder="Search market..." autocomplete="off"></label>` : ""}
+    <button class="website-market-search-button" type="button" data-action="toggle-market-search" aria-label="${state.marketSearchOpen ? "Close market search" : "Search markets"}" aria-expanded="${state.marketSearchOpen}">${state.marketSearchOpen ? "×" : "⌕"}</button>
+  </div>`;
 }
 
 function renderHomeOverview() {
@@ -3057,13 +3094,15 @@ function marketsForCategory(category) {
 function renderMarkets() {
   if (state.featureMarketPage) {
     return `<section class="feature-market-page">
-      <header><h1>${safeText(state.category === "Gali / Disawar" ? "Gali / Disawar" : marketCategoryLabel(state.category))}</h1></header>
+      <header class="market-section-head"><h1>${safeText(state.category === "Gali / Disawar" ? "Gali / Disawar" : marketCategoryLabel(state.category))}</h1></header>
+      ${marketListSearchRow()}
       ${marketCards(marketsForCategory(state.category), true)}
     </section>`;
   }
   const allMarkets = marketsForCategory(state.category);
   return `${renderHomeOverview()}
-    <div class="section-head"><h2>${safeText(marketCategoryLabel(state.category))} markets</h2><button class="text-button" type="button" data-action="refresh">↻ Auto Refresh</button></div>
+    <div class="section-head market-section-head"><h2>${safeText(marketCategoryLabel(state.category))} markets</h2><button class="text-button" type="button" data-action="refresh">↻ Auto Refresh</button></div>
+    ${marketListSearchRow()}
     ${marketCards(allMarkets, true)}`;
 }
 
@@ -3399,6 +3438,13 @@ function renderGameSelect() {
   if (!market || !marketSessions(market).includes(state.selectedSession)) {
     return heading("Choose game", "This market is no longer open for the selected session.");
   }
+  if (/gali|disawar/i.test(market.category)) {
+    state.selectedGame = "Jodi";
+    state.betDraft = [];
+    state.betGridPrimary = "";
+    setPage("betting");
+    return "";
+  }
   const sessions = marketSessions(market);
   const isRunning = sessions.includes(state.selectedSession);
   return `<section class="aia-game-select-page">
@@ -3409,7 +3455,7 @@ function renderGameSelect() {
       </button>
       <button type="button" class="aia-game-select-chart" data-market-result="${safeText(market.id)}" aria-label="View ${safeText(market.name)} result chart"><img src="icon-chart.png" alt=""></button>
     </header>
-    <div class="aia-game-grid">${GAME_TYPES.filter(game => game !== "Full Sangam" || state.selectedSession === "Open").map(gameTile).join("")}</div>
+    <div class="aia-game-grid">${marketGameTypes(market).filter(game => game !== "Full Sangam" || state.selectedSession === "Open").map(gameTile).join("")}</div>
   </section>`;
 }
 
@@ -3542,6 +3588,8 @@ function renderBetting() {
   const { total, remaining, shortfall: balanceShortfall } = betDraftTotals(state.betDraft, state.balance);
   const maximumBetAmount = state.maximumEntry > 0 ? state.maximumEntry : "";
   const panaGame = /pana|panel/i.test(state.selectedGame);
+  const isGaliMarket = /gali|disawar/i.test(market.category);
+  if (isGaliMarket) state.selectedSession = "Open";
   const marketAvailableSessions = marketSessions(market);
   const availableSessions = state.selectedGame === "Full Sangam"
     ? marketAvailableSessions.filter(session => session === "Open")
@@ -3550,7 +3598,8 @@ function renderBetting() {
     state.selectedSession = availableSessions[0];
   }
   const sessionOptions = availableSessions.length ? availableSessions : [state.selectedSession];
-  const sessionSelector = `<div class="aia-entry-session"><label for="bet-session">Select Session :</label><select id="bet-session" name="session" ${availableSessions.length ? "" : "disabled"}>${sessionOptions.map(session => `<option value="${session}" ${state.selectedSession === session ? "selected" : ""}>${session}</option>`).join("")}</select></div>`;
+  const sessionSelector = isGaliMarket ? ""
+    : `<div class="aia-entry-session"><label for="bet-session">Select Session :</label><select id="bet-session" name="session" ${availableSessions.length ? "" : "disabled"}>${sessionOptions.map(session => `<option value="${session}" ${state.selectedSession === session ? "selected" : ""}>${session}</option>`).join("")}</select></div>`;
   const unavailableMessage = state.maintenance
     ? "Game play is temporarily unavailable during maintenance."
     : state.accountBlocked ? "This account is blocked from placing games."
@@ -4262,6 +4311,19 @@ function dbKey(value) {
 }
 
 async function submitBid() {
+  let market = state.markets.find(item => item.name === state.selectedMarket);
+  if (market?.category && /starline|gali|disawar/i.test(market.category) && state.selectedSession !== "Open") {
+    notify("Starline and Gali / Disawar markets accept Open-session bids only.", "error");
+    return;
+  }
+  if (market?.category && /gali|disawar/i.test(market.category) && state.selectedGame !== "Jodi") {
+    notify("Gali / Disawar markets accept Jodi bids only.", "error");
+    return;
+  }
+  if (market?.category && /starline/i.test(market.category) && typeof marketGameTypes === "function" && !marketGameTypes(market).includes(state.selectedGame)) {
+    notify("This game type is not available for Starline markets.", "error");
+    return;
+  }
   const form = query("#bid-form");
   if (!form) return;
   if (state.accountBlocked) {
@@ -4272,7 +4334,6 @@ async function submitBid() {
     notify("Bidding is unavailable during maintenance.", "error");
     return;
   }
-  let market = state.markets.find(item => item.name === state.selectedMarket);
   if (state.betDraft.some(item => !Number.isFinite(item.amount)
     || item.amount <= 0
     || (state.minimumEntry > 0 && item.amount < state.minimumEntry)
@@ -5021,6 +5082,14 @@ function handleClick(event) {
     setPage("markets");
     return;
   }
+  if (target.dataset.action === "toggle-market-search") {
+    state.marketSearchOpen = !state.marketSearchOpen;
+    if (!state.marketSearchOpen) state.marketSearchQuery = "";
+    void renderPage().then(() => {
+      if (state.marketSearchOpen) query("#website-market-search")?.focus();
+    }).catch(error => notify(error.message || "Could not open market search.", "error"));
+    return;
+  }
   if (target.dataset.action === "open-matka") {
     const matka = target.dataset.matka === "30"
       ? { name: "Matka 30", url: state.matka30Url }
@@ -5392,9 +5461,9 @@ function handleClick(event) {
       state.selectedMarket = market.name;
       state.betGridPrimary = "";
       if (!sessions.includes(state.selectedSession)) state.selectedSession = sessions[0];
-      state.selectedGame = "";
+      state.selectedGame = /gali|disawar/i.test(market.category) ? "Jodi" : "";
       state.betDraft = [];
-      setPage("game-select");
+      setPage(/gali|disawar/i.test(market.category) ? "betting" : "game-select");
     }
     return;
   }
@@ -5404,6 +5473,18 @@ function handleClick(event) {
 document.addEventListener("input", event => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement)) return;
+  if (input.id === "website-market-search") {
+    state.marketSearchQuery = input.value;
+    const selectionStart = input.selectionStart;
+    void renderPage().then(() => {
+      const replacement = query("#website-market-search");
+      replacement?.focus();
+      if (replacement && typeof selectionStart === "number") {
+        replacement.setSelectionRange(selectionStart, selectionStart);
+      }
+    }).catch(error => notify(error.message || "Could not filter markets.", "error"));
+    return;
+  }
   if (input.id === "bet-amount") {
     state.betEntryAmount = input.value;
     return;
